@@ -3,9 +3,22 @@
 #![allow(rustdoc::missing_crate_level_docs)]
 
 use eframe::egui;
+use pest::Parser;
+use pest_derive::Parser;
+
+#[derive(Parser)]
+#[grammar = "csv.pest"]
+pub struct CSVParser;
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+
+    let successful_parse = CSVParser::parse(Rule::field, "-273.15");
+    println!("{:?}", successful_parse);
+
+    let unsuccessful_parse = CSVParser::parse(Rule::field, "this is not a number");
+    println!("{:?}", unsuccessful_parse);
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
@@ -55,9 +68,14 @@ impl MyApp {
     }
 }
 
+fn heading(text: &str) -> egui::Label {
+    egui::Label::new(egui::RichText::new(text).font(egui::FontId::proportional(20.0)))
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add(heading("Circuit"));
         });
     }
 }
