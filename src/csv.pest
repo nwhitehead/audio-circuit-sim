@@ -1,9 +1,13 @@
+
+// A number, try to allow scientific notation
 number = @{
     "-"?
     ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)
     ~ ("." ~ ASCII_DIGIT*)?
     ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
 }
+
+// String, in double quotes, with some escaping logic
 string = @{ "\"" ~ inner ~ "\"" }
 inner = @{ char* }
 char = {
@@ -11,11 +15,27 @@ char = {
     | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
+
+// Identifiers are like strings but not in quotes
 idchar = {
-    !("\"" | "\\" | " ") ~ ANY
+    !("\"" | "\\" | " " | "\n" | "\r" ) ~ ANY
 }
 identifier = @{ idchar* }
 
+// A field is any of those types
 field = _{ string | number | identifier }
+
+// A record is fields separated by single spaces
 record = { field ~ (" " ~ field)* }
-file = { SOI ~ (record ~ ("\r\n" | "\n"))* ~ EOI }
+
+// A comment line starts with #
+newline = _{
+    "\r\n" | "\n"
+}
+notnewline = _{
+    !newline ~ ANY
+}
+comment = _{ "#" ~ notnewline* }
+
+// A file is a bunch of records on each line
+file = { SOI ~ ((comment | record) ~ newline)* ~ EOI }

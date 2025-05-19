@@ -17,6 +17,7 @@ fn main() -> Result<(), eframe::Error> {
     println!("{:?}", CSVParser::parse(Rule::field, "F2 V"));
     println!("{:?}", CSVParser::parse(Rule::field, "\"this\""));
     println!("{:?}", CSVParser::parse(Rule::record, "X \"this\" 37 0 F"));
+    println!("{:?}", CSVParser::parse(Rule::file, "# comment\nX \"this\" 37 0 F\n"));
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
