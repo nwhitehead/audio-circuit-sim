@@ -13,11 +13,10 @@ pub struct CSVParser;
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    let successful_parse = CSVParser::parse(Rule::field, "-273.15");
-    println!("{:?}", successful_parse);
-
-    let unsuccessful_parse = CSVParser::parse(Rule::field, "this is not a number");
-    println!("{:?}", unsuccessful_parse);
+    println!("{:?}", CSVParser::parse(Rule::field, "-273.15"));
+    println!("{:?}", CSVParser::parse(Rule::field, "F2 V"));
+    println!("{:?}", CSVParser::parse(Rule::field, "\"this\""));
+    println!("{:?}", CSVParser::parse(Rule::record, "X \"this\" 37 0 F"));
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
