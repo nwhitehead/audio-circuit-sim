@@ -13,11 +13,19 @@ pub struct CSVParser;
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    println!("{:?}", CSVParser::parse(Rule::field, "-273.15"));
-    println!("{:?}", CSVParser::parse(Rule::field, "F2 V"));
-    println!("{:?}", CSVParser::parse(Rule::field, "\"this\""));
-    println!("{:?}", CSVParser::parse(Rule::record, "X \"this\" 37 0 F"));
-    println!("{:?}", CSVParser::parse(Rule::file, "# comment\nX \"this\" 37 0 F\n"));
+    let bytes = include_bytes!("./component.lib");
+    // println!("{:?}", CSVParser::parse(Rule::field, "-273.15"));
+    // println!("{:?}", CSVParser::parse(Rule::field, "F2 V"));
+    // println!("{:?}", CSVParser::parse(Rule::field, "\"this\""));
+    // println!("{:?}", CSVParser::parse(Rule::record, "X \"this\" 37 0 F"));
+    // println!("{:?}", CSVParser::parse(Rule::file, "# comment\nX \"this\" 37 0 F\n"));
+
+    // println!("{:?}", CSVParser::parse(Rule::file, " $FPLIST\n"));
+    // println!("{:?}", CSVParser::parse(Rule::record, "DEF 2N3906 Q 0 0 Y N 1 F N"));
+    // println!("{:?}", CSVParser::parse(Rule::file, &String::from_utf8_lossy(bytes)));
+    println!("{:?}", CSVParser::parse(Rule::field, "2F2"));
+
+    
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),

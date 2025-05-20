@@ -20,7 +20,7 @@ char = {
 idchar = {
     !("\"" | "\\" | " " | "\n" | "\r" ) ~ ANY
 }
-identifier = @{ idchar* }
+identifier = @{ idchar+ }
 
 // A field is any of those types
 field = _{ string | number | identifier }
@@ -37,5 +37,9 @@ notnewline = _{
 }
 comment = _{ "#" ~ notnewline* }
 
+spaces = _{
+    " "*
+}
 // A file is a bunch of records on each line
-file = { SOI ~ ((comment | record) ~ newline)* ~ EOI }
+// Allow spaces at start of line
+file = { SOI ~ ( spaces ~ (comment | record) ~ newline)* ~ EOI }
