@@ -1,14 +1,6 @@
 
-// A number, try to allow scientific notation
-number = @{
-    "-"?
-    ~ ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)
-    ~ ("." ~ ASCII_DIGIT*)?
-    ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
-}
-
 // String, in double quotes, with some escaping logic
-string = @{ "\"" ~ inner ~ "\"" }
+string = { "\"" ~ inner ~ "\"" }
 inner = @{ char* }
 char = {
     !("\"" | "\\") ~ ANY
@@ -18,15 +10,15 @@ char = {
 
 // Identifiers are like strings but not in quotes
 idchar = {
-    !("\"" | "\\" | " " | "\n" | "\r" ) ~ ANY
+    !("\"" | "\\" | " " | "\t" | "\n" | "\r" ) ~ ANY
 }
 identifier = @{ idchar+ }
 
 // A field is any of those types
-field = _{ string | number | identifier }
+field = _{ string | identifier }
 
 // A record is fields separated by single spaces
-record = { field ~ (" " ~ field)* }
+record = { field ~ (" "+ ~ field)* }
 
 // A comment line starts with #
 newline = _{

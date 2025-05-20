@@ -4,16 +4,110 @@
 
 use eframe::egui;
 use pest::Parser;
+use pest::error::Error;
+use pest::iterators::Pair;
 use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "csv.pest"]
 pub struct CSVParser;
 
+#[derive(Debug, PartialEq)]
+enum Entry {
+    Identifier(String),
+    QuotedString(String),
+    Number(f64),
+}
+
+type Record = std::vec::Vec<Entry>;
+type File = std::vec::Vec<Record>;
+
+fn parse_value(pair: Pair<Rule>) -> Entry {
+    match pair.as_rule() {
+        // Always try parsing identifier as number
+        Rule::identifier => {
+            let txt = pair.as_str();
+            match txt.parse::<f64>() {
+                Ok(n) => Entry::Number(n),
+                // If it doesn't work as number, just make it an identifier
+                Err(..) => Entry::Identifier(txt.into()),
+            }
+        },
+        Rule::string => Entry::QuotedString(pair.into_inner().as_str().into()),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_record(pair: Pair<Rule>) -> Record {
+    pair.into_inner().map(parse_value).collect::<Record>()
+}
+
+fn parse_file(contents: &str) -> Result<File, pest::error::Error<Rule>> {
+    let data = CSVParser::parse(Rule::file, contents)?.next().unwrap();
+    Ok(vec![])
+}
+
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
     let bytes = include_bytes!("./component.lib");
+    let data = parse_file(&String::from_utf8_lossy(bytes));
+
+    assert_eq!(
+        parse_value(
+            CSVParser::parse(Rule::field, "0")
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        Entry::Number(0.0)
+    );
+    assert_eq!(
+        parse_value(
+            CSVParser::parse(Rule::field, "-273.15")
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        Entry::Number(-273.15)
+    );
+    assert_eq!(
+        parse_value(
+            CSVParser::parse(Rule::field, "2N2222")
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        Entry::Identifier("2N2222".into())
+    );
+    assert_eq!(
+        parse_value(
+            CSVParser::parse(Rule::field, "2N2222")
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        Entry::Identifier("2N2222".into())
+    );
+    assert_eq!(
+        parse_value(
+            CSVParser::parse(Rule::field, "\"abc\"")
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        Entry::QuotedString("abc".into())
+    );
+    assert_eq!(
+        parse_record(
+            CSVParser::parse(Rule::record, "F 1")
+                .unwrap()
+                .next()
+                .unwrap()
+        ),
+        vec![Entry::Identifier("F".into()), Entry::Number(1.0)]
+    );
+
     // println!("{:?}", CSVParser::parse(Rule::field, "-273.15"));
     // println!("{:?}", CSVParser::parse(Rule::field, "F2 V"));
     // println!("{:?}", CSVParser::parse(Rule::field, "\"this\""));
@@ -22,10 +116,8 @@ fn main() -> Result<(), eframe::Error> {
 
     // println!("{:?}", CSVParser::parse(Rule::file, " $FPLIST\n"));
     // println!("{:?}", CSVParser::parse(Rule::record, "DEF 2N3906 Q 0 0 Y N 1 F N"));
-    // println!("{:?}", CSVParser::parse(Rule::file, &String::from_utf8_lossy(bytes)));
-    println!("{:?}", CSVParser::parse(Rule::field, "2F2"));
-
-    
+    // println!("{:?}", CSVParser::parse(Rule::file, &String::from_utf8_lossy(bytes)).expect("parsed"));
+    // println!("{:?}", CSVParser::parse(Rule::field, "2F2"));
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
@@ -43,12 +135,11 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-struct MyApp {
-}
+struct MyApp {}
 
 impl Default for MyApp {
     fn default() -> Self {
-        Self { }
+        Self {}
     }
 }
 
@@ -57,14 +148,14 @@ impl MyApp {
         let mut fonts = egui::FontDefinitions::default();
         fonts.font_data.insert(
             "SaxMono".to_owned(),
-            egui::FontData::from_static(include_bytes!("../fonts/saxmono.ttf")).tweak(
-                egui::FontTweak {
+            egui::FontData::from_static(include_bytes!("../fonts/saxmono.ttf"))
+                .tweak(egui::FontTweak {
                     scale: 1.0,
                     y_offset_factor: 0.0,
                     y_offset: 0.0,
                     baseline_offset_factor: 0.1,
-                },
-            ).into(),
+                })
+                .into(),
         );
         fonts
             .families
