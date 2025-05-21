@@ -43,8 +43,9 @@ fn parse_record(pair: Pair<Rule>) -> Record {
 }
 
 fn parse_file(contents: &str) -> Result<File, pest::error::Error<Rule>> {
-    let data = CSVParser::parse(Rule::file, contents)?.next().unwrap();
-    Ok(vec![])
+    let pair = CSVParser::parse(Rule::file, contents)?.next().unwrap();
+    println!("{:?}", pair);
+    Ok(pair.map(parse_record).collect::<File>())
 }
 
 fn main() -> Result<(), eframe::Error> {
