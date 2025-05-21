@@ -16,7 +16,10 @@ def parse_line(line):
         try:
             v = float(part)
         except ValueError:
-            v = part
+            if part.startswith('"') and part.endswith('"'):
+                v = part.encode().decode('unicode-escape').lstrip('"').rstrip('"')
+            else:
+                v = part
         res.append(v)
     return res
 
@@ -28,23 +31,20 @@ def parse_lines(lines):
             v = parse_line(line)
             if len(v) > 0 and v[0] in PAIRS:
                 name = v[0]
-                print(f'OPEN {name}')
                 res.append([])
                 envs.append(name)
             elif len(v) > 0 and len(envs) > 0 and v[0] == PAIRS[envs[-1]]:
                 name = envs.pop()
-                print(f'CLOSE {name}')
                 contents = res.pop()
-                print(f'Contents is {contents}')
-                print(f'res = {res}')
                 res[-1].append({
                     'name': name,
                     'content': contents,
                 })
+            elif len(v) > 0 and v[0] == 'EESchema-LIBRARY':
+                pass
             else:
                 res[-1].append(v)
-        print(res)
-    return res
+    return res[0]
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -53,6 +53,6 @@ if __name__ == '__main__':
     print(args)
     with open(args.input, 'rt') as fin:
         lines = [ line.rstrip() for line in fin]
-        print(parse_lines(lines))
-                # if len(v) > 0 and v[0] in PAIRS:
-                #     print(f'OPEN {v[0]}')
+        data = parse_lines(lines)
+        for elem in data:
+            print(elem)
