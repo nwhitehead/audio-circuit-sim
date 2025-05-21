@@ -1,4 +1,15 @@
+"""
+
+Command line utility for parsing KiCAD lib files and outputting JSON format.
+
+Example ussage:
+
+    uv run script/lib2json.py ../kicad-symbols/Transistor_BJT.lib > BJT.json
+
+"""
+
 import argparse
+import json
 
 PAIRS = {
     'DEF': 'ENDDEF', 
@@ -36,11 +47,9 @@ def parse_lines(lines):
             elif len(v) > 0 and len(envs) > 0 and v[0] == PAIRS[envs[-1]]:
                 name = envs.pop()
                 contents = res.pop()
-                res[-1].append({
-                    'name': name,
-                    'content': contents,
-                })
+                res[-1].append([name, contents])
             elif len(v) > 0 and v[0] == 'EESchema-LIBRARY':
+                # Just ignore schema version for now
                 pass
             else:
                 res[-1].append(v)
@@ -50,9 +59,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('input')
     args = parser.parse_args()
-    print(args)
     with open(args.input, 'rt') as fin:
         lines = [ line.rstrip() for line in fin]
         data = parse_lines(lines)
-        for elem in data:
-            print(elem)
+        print(json.dumps(data))
