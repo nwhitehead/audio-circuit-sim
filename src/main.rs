@@ -8,10 +8,6 @@ use serde_json::{Value};
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
-    let bytes = include_bytes!("./BJT.json");
-    let parsed: Value = serde_json::from_slice(bytes).unwrap();
-    println!("{:?}", parsed);
-
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
         ..Default::default()
@@ -28,11 +24,19 @@ fn main() -> Result<(), eframe::Error> {
     )
 }
 
-struct MyApp {}
+struct MyApp {
+    lib: serde_json::Value,
+    n: usize,
+}
 
 impl Default for MyApp {
     fn default() -> Self {
-        Self {}
+        let bytes = include_bytes!("./BJT.json");
+        let parsed: Value = serde_json::from_slice(bytes).unwrap();
+        Self {
+            lib: parsed,
+            n: 0,
+        }
     }
 }
 
@@ -64,8 +68,20 @@ fn heading(text: &str) -> egui::Label {
     egui::Label::new(egui::RichText::new(text).font(egui::FontId::proportional(20.0)))
 }
 
+fn find_draw(v: &Value) -> Option<&Value> {
+    for i in 0..v.as_array().unwrap().len() {
+        if v[i][0] == serde_json::Value::String("DRAW".into()) {
+            return Some(&v[i][1]);
+        }
+    }
+    return None;
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let nth = &self.lib[self.n][1];
+        let draw = find_draw(&nth);
+        println!("{:?}", draw);
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(heading("Circuit"));
         });
