@@ -102,7 +102,27 @@ fn drawline_to_shape(v: &Value) -> Option<Shape> {
                     println!("C {:?} : {} {}", a, x, y);
                 }
             },
-            "P" => println!("P"),
+            "P" => {
+                println!("{:?}", a);
+                let (n, w);
+                n = parse_number(&a[1]).unwrap() as usize;
+                // Get width, make sure it is at least 1.0 (0 means 1 pixel wide)
+                w = parse_number(&a[4]).unwrap().max(2.0);
+                let mut v: std::vec::Vec<Pos2> = vec![];
+                for i in 0..n {
+                    let (x, y);
+                    x = parse_number(&a[5 + 2 * i]).unwrap() + 150.0;
+                    y = parse_number(&a[6 + 2 * i]).unwrap() + 200.0;
+                    v.push(Pos2::new(x, y));
+                }
+                let filled = a[5 + 2 * n].as_str().unwrap() == "F";
+                //return Some(Shape::convex_polygon(v, Color32::WHITE, Stroke::new(w, Color32::WHITE)));
+                if filled {
+                    return Some(Shape::convex_polygon(v, Color32::WHITE, Stroke::new(w, Color32::WHITE)));
+                } else {
+                    return Some(Shape::line(v, Stroke::new(w, Color32::WHITE)));
+                }
+            },
             &_ => return None,
         }
     }
@@ -119,8 +139,11 @@ impl eframe::App for MyApp {
             ui.add(heading("Circuit"));
             let painter = ui.painter();
             let c = Shape::circle_filled(Pos2::new(100.0, 100.0), 20.0, Color32::WHITE);
-            if let Some(s) = drawline_to_shape(&draw[0]) {
-                painter.add(s);
+            let n = draw.as_array().unwrap().len();
+            for i in 0..n {
+                if let Some(s) = drawline_to_shape(&draw[i]) {
+                    painter.add(s);
+                }    
             }
         });
     }
