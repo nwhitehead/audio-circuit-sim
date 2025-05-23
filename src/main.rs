@@ -78,15 +78,27 @@ fn find_draw(v: &Value) -> Option<&Value> {
     return None;
 }
 
+fn parse_number(v: &Value) -> Option<f32> {
+    match v.as_number() {
+        Some(n) => Some(n.as_f64().unwrap() as f32),
+        None => None,
+    }
+}
+
 fn drawline_to_shape(v: &Value) -> Option<Shape> {
     let a = v.as_array().unwrap();
     let tag = &a[0];
-    // if *tag == serde_json::Value::String("C".into()) {
-    // }
     if tag.is_string() {
         let ts = tag.as_str().unwrap();
         match ts {
-            "C" => println!("C"),
+            "C" => {
+                let (x, y, r);
+                x = parse_number(&a[1]).unwrap() + 150.0;
+                y = parse_number(&a[2]).unwrap() + 200.0;
+                r = parse_number(&a[3]).unwrap();
+                println!("C {:?} : {} {}", a, x, y);
+                return Some(Shape::circle_filled(Pos2::new(x, y), r, Color32::WHITE));
+            },
             "P" => println!("P"),
             &_ => return None,
         }
