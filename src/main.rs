@@ -5,6 +5,7 @@
 use eframe::egui;
 use serde_json::{Value};
 use crate::egui::{Color32, Pos2, Shape, Stroke};
+use glam::{Vec2, Affine2};
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -36,7 +37,7 @@ impl Default for MyApp {
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         Self {
             lib: parsed,
-            n: 0,
+            n: 5, // <==============
         }
     }
 }
@@ -85,7 +86,13 @@ fn parse_number(v: &Value) -> Option<f32> {
     }
 }
 
-fn drawline_to_shape(v: &Value) -> Option<Shape> {
+fn apply_affine2(v: &Pos2, a: &Affine2) -> Pos2 {
+    let p = a.transform_point2(Vec2::new(v.x, v.y));
+    let sx = a.transform_vector2(Vec2::new(1.0, 0.0));
+    return Pos2::new(p.x, p.y);
+}
+
+fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<Shape> {
     let a = v.as_array().unwrap();
     let tag = &a[0];
     if tag.is_string() {
@@ -93,17 +100,16 @@ fn drawline_to_shape(v: &Value) -> Option<Shape> {
         match ts {
             "C" => {
                 let (x, y, r, w);
-                x = parse_number(&a[1]).unwrap() + 150.0;
-                y = parse_number(&a[2]).unwrap() + 200.0;
+                x = parse_number(&a[1]).unwrap();
+                y = parse_number(&a[2]).unwrap();
                 r = parse_number(&a[3]).unwrap();
                 w = parse_number(&a[6]).unwrap();
                 if a[7].as_str().unwrap() == "N" {
-                    return Some(Shape::circle_stroke(Pos2::new(x, y), r, Stroke::new(w, Color32::WHITE)));
-                    println!("C {:?} : {} {}", a, x, y);
+                    let c = apply_affine2(&Pos2::new(x, y), &transform);
+                    return Some(Shape::circle_stroke(c, r, Stroke::new(w, color)));
                 }
             },
             "P" => {
-                println!("{:?}", a);
                 let (n, w);
                 n = parse_number(&a[1]).unwrap() as usize;
                 // Get width, make sure it is at least 1.0 (0 means 1 pixel wide)
@@ -111,37 +117,60 @@ fn drawline_to_shape(v: &Value) -> Option<Shape> {
                 let mut v: std::vec::Vec<Pos2> = vec![];
                 for i in 0..n {
                     let (x, y);
-                    x = parse_number(&a[5 + 2 * i]).unwrap() + 150.0;
-                    y = parse_number(&a[6 + 2 * i]).unwrap() + 200.0;
-                    v.push(Pos2::new(x, y));
+                    x = parse_number(&a[5 + 2 * i]).unwrap();
+                    y = parse_number(&a[6 + 2 * i]).unwrap();
+                    let c = apply_affine2(&Pos2::new(x, y), &transform);
+                    v.push(c);
                 }
-                let filled = a[5 + 2 * n].as_str().unwrap() == "F";
-                //return Some(Shape::convex_polygon(v, Color32::WHITE, Stroke::new(w, Color32::WHITE)));
+                let filled = a[5 + 2 * n].as_str().unwrap() == "F" && w == 2.0;
                 if filled {
-                    return Some(Shape::convex_polygon(v, Color32::WHITE, Stroke::new(w, Color32::WHITE)));
+                    return Some(Shape::convex_polygon(v, color, Stroke::default()));
                 } else {
-                    return Some(Shape::line(v, Stroke::new(w, Color32::WHITE)));
+                    return Some(Shape::line(v, Stroke::new(w, color)));
                 }
             },
             &_ => return None,
         }
     }
-    //return Some(Shape::circle_filled(Pos2::new(100.0, 100.0), 20.0, Color32::WHITE));
     return None;
+}
+
+fn nth_color(i: usize) -> Color32 {
+    match i % 6 {
+        0 => Color32::WHITE,
+        1 => Color32::YELLOW,
+        2 => Color32::RED,
+        3 => Color32::PURPLE,
+        4 => Color32::LIGHT_RED,
+        5 => Color32::LIGHT_BLUE,
+        _ => unreachable!(),
+    }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let nth = &self.lib[self.n][1];
         let draw = find_draw(&nth).unwrap();
-        //println!("{:?}", draw);
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(heading("Circuit"));
+            if ui.add(egui::Button::new("Prev symbol")).clicked() {
+                self.n -= 1;
+            }
+            if ui.add(egui::Button::new("Next symbol")).clicked() {
+                self.n += 1;
+            }
+            if ui.add(egui::Button::new("Show draw")).clicked() {
+                let partname = &nth[1][1].as_str().unwrap();
+                println!("================  {}  ==========", partname);
+                for i in draw.as_array().unwrap() {
+                    println!("{:?}", i);
+                }
+            }
             let painter = ui.painter();
-            let c = Shape::circle_filled(Pos2::new(100.0, 100.0), 20.0, Color32::WHITE);
+            let transform = Affine2::from_scale_angle_translation(Vec2::new(1.0, 1.0), 3.14159*0.0, Vec2::new(300.0, 250.0));
             let n = draw.as_array().unwrap().len();
             for i in 0..n {
-                if let Some(s) = drawline_to_shape(&draw[i]) {
+                if let Some(s) = drawline_to_shape(&draw[i], &transform, nth_color(i)) {
                     painter.add(s);
                 }    
             }
