@@ -4,6 +4,7 @@
 
 use eframe::egui;
 use serde_json::{Value};
+use crate::egui::{Color32, Pos2, Shape};
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -77,13 +78,35 @@ fn find_draw(v: &Value) -> Option<&Value> {
     return None;
 }
 
+fn drawline_to_shape(v: &Value) -> Option<Shape> {
+    let a = v.as_array().unwrap();
+    let tag = &a[0];
+    // if *tag == serde_json::Value::String("C".into()) {
+    // }
+    if tag.is_string() {
+        let ts = tag.as_str().unwrap();
+        match ts {
+            "C" => println!("C"),
+            "P" => println!("P"),
+            &_ => return None,
+        }
+    }
+    //return Some(Shape::circle_filled(Pos2::new(100.0, 100.0), 20.0, Color32::WHITE));
+    return None;
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let nth = &self.lib[self.n][1];
-        let draw = find_draw(&nth);
-        println!("{:?}", draw);
+        let draw = find_draw(&nth).unwrap();
+        //println!("{:?}", draw);
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(heading("Circuit"));
+            let painter = ui.painter();
+            let c = Shape::circle_filled(Pos2::new(100.0, 100.0), 20.0, Color32::WHITE);
+            if let Some(s) = drawline_to_shape(&draw[0]) {
+                painter.add(s);
+            }
         });
     }
 }
