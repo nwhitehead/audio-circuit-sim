@@ -4,7 +4,7 @@
 
 use eframe::egui;
 use serde_json::{Value};
-use crate::egui::{Color32, Pos2, Shape};
+use crate::egui::{Color32, Pos2, Shape, Stroke};
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -92,12 +92,15 @@ fn drawline_to_shape(v: &Value) -> Option<Shape> {
         let ts = tag.as_str().unwrap();
         match ts {
             "C" => {
-                let (x, y, r);
+                let (x, y, r, w);
                 x = parse_number(&a[1]).unwrap() + 150.0;
                 y = parse_number(&a[2]).unwrap() + 200.0;
                 r = parse_number(&a[3]).unwrap();
-                println!("C {:?} : {} {}", a, x, y);
-                return Some(Shape::circle_filled(Pos2::new(x, y), r, Color32::WHITE));
+                w = parse_number(&a[6]).unwrap();
+                if a[7].as_str().unwrap() == "N" {
+                    return Some(Shape::circle_stroke(Pos2::new(x, y), r, Stroke::new(w, Color32::WHITE)));
+                    println!("C {:?} : {} {}", a, x, y);
+                }
             },
             "P" => println!("P"),
             &_ => return None,
