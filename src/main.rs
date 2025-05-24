@@ -16,7 +16,7 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     eframe::run_native(
-        "Nathan's App",
+        "Circuit App",
         options,
         Box::new(|cc| {
             // This gives us image support:
@@ -92,6 +92,36 @@ fn apply_affine2(v: &Pos2, a: &Affine2) -> Pos2 {
     return Pos2::new(p.x, p.y);
 }
 
+fn draw_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Shape {
+    let mut shapes = vec![];
+    let n = v.as_array().unwrap().len();
+    for i in 0..n {
+        if let Some(s) = drawline_to_shape(&v[i], &transform, color) {
+            shapes.push(s);
+        }
+    }
+    return Shape::Vec(shapes);
+}
+
+fn draw_to_padpos(v: &Value, transform: &Affine2) -> Vec<Pos2> {
+    let mut res = vec![];
+    let n = v.as_array().unwrap().len();
+    for i in 0..n {
+        let color = Color32::WHITE;
+        let vi = &v[i];
+        let a = vi.as_array().unwrap();
+        let tag = &a[0];
+        let ts = tag.as_str().unwrap();
+        if ts == "X" {
+            let (x, y);
+            x = parse_number(&a[3]).unwrap();
+            y = parse_number(&a[4]).unwrap();
+            res.push(apply_affine2(&Pos2::new(x, y), transform));
+        }
+    }
+    return res;
+}
+
 fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<Shape> {
     let a = v.as_array().unwrap();
     let tag = &a[0];
@@ -153,18 +183,6 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
     return None;
 }
 
-fn nth_color(i: usize) -> Color32 {
-    match i % 6 {
-        0 => Color32::WHITE,
-        1 => Color32::YELLOW,
-        2 => Color32::RED,
-        3 => Color32::PURPLE,
-        4 => Color32::LIGHT_RED,
-        5 => Color32::LIGHT_BLUE,
-        _ => unreachable!(),
-    }
-}
-
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let nth = &self.lib[self.n][1];
@@ -192,12 +210,10 @@ impl eframe::App for MyApp {
             }
             let painter = ui.painter();
             let transform = Affine2::from_scale_angle_translation(Vec2::new(1.0, 1.0), 3.14159*0.0, Vec2::new(300.0, 250.0));
-            let n = draw.as_array().unwrap().len();
-            for i in 0..n {
-                if let Some(s) = drawline_to_shape(&draw[i], &transform, nth_color(i)) {
-                    painter.add(s);
-                }    
-            }
+            let color = Color32::WHITE;
+            painter.add(draw_to_shape(&draw, &transform, color));
+            let leads = draw_to_padpos(&draw, &transform);
+            println!("Padpos = {:?}", leads);
         });
     }
 }
