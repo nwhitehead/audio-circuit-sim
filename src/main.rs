@@ -37,7 +37,7 @@ impl Default for MyApp {
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         Self {
             lib: parsed,
-            n: 5, // <==============
+            n: 0,
         }
     }
 }
@@ -129,6 +129,24 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
                     return Some(Shape::line(v, Stroke::new(w, color)));
                 }
             },
+            "X" => {
+                let (x, y, l, d, w);
+                x = parse_number(&a[3]).unwrap();
+                y = parse_number(&a[4]).unwrap();
+                l = parse_number(&a[5]).unwrap();
+                d = a[6].as_str().unwrap();
+                w = 2.0;
+                let vl = match d {
+                    "U" => Pos2::new(0.0, 1.0),
+                    "D" => Pos2::new(0.0, -1.0),
+                    "L" => Pos2::new(-1.0, 0.0),
+                    "R" => Pos2::new(1.0, 0.0),
+                    &_ => unreachable!(),
+                };
+                let c1 = apply_affine2(&Pos2::new(x, y), &transform);
+                let c2 = apply_affine2(&Pos2::new(x + l * vl.x, y + l * vl.y), &transform);
+                return Some(Shape::line_segment([c1, c2], Stroke::new(w, color)))
+            },
             &_ => return None,
         }
     }
@@ -154,10 +172,16 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(heading("Circuit"));
             if ui.add(egui::Button::new("Prev symbol")).clicked() {
-                self.n -= 1;
+                if self.n > 0 {
+                    self.n -= 1;
+                }
             }
             if ui.add(egui::Button::new("Next symbol")).clicked() {
                 self.n += 1;
+            }
+            let max_n = self.lib.as_array().unwrap().len() - 1;
+            if self.n > max_n {
+                self.n = max_n;
             }
             if ui.add(egui::Button::new("Show draw")).clicked() {
                 let partname = &nth[1][1].as_str().unwrap();
