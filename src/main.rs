@@ -37,7 +37,7 @@ impl Default for MyApp {
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         Self {
             lib: parsed,
-            n: 0,
+            n: 1,
         }
     }
 }
@@ -131,7 +131,18 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
                 if filled {
                     return Some(Shape::convex_polygon(v, color, Stroke::default()));
                 } else {
-                    return Some(Shape::line(v, Stroke::new(w, color)));
+                    let mut res = vec![];
+                    // Add individual line segments connecting pairs.
+                    // This avoids jagged connectors that extend beyond radius of line bend.
+                    for i in 0..v.len() - 1 {
+                        res.push(Shape::line_segment([v[i], v[i + 1]], Stroke::new(w, color)));
+                    }
+                    // Add circles to connect lines.
+                    // Smaller than width / 2 to make it visually look better.
+                    for p in v {
+                        res.push(Shape::circle_filled(p, w * 0.48, color));
+                    }
+                    return Some(Shape::Vec(res));
                 }
             },
             "X" => {
