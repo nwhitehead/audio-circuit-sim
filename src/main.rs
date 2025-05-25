@@ -33,11 +33,11 @@ struct MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
-        let bytes = include_bytes!("./Diode.json");
+        let bytes = include_bytes!("./BJT.json");
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         Self {
             lib: parsed,
-            n: 1,
+            n: 0,
         }
     }
 }
