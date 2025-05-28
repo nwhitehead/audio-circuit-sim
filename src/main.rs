@@ -2,10 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
-use eframe::egui;
-use serde_json::{Value};
 use crate::egui::{Color32, Pos2, Shape, Stroke};
-use glam::{Vec2, Affine2};
+use eframe::egui;
+use glam::{Affine2, Vec2};
+use serde_json::Value;
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -33,12 +33,9 @@ struct MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
-        let bytes = include_bytes!("./BJT.json");
+        let bytes = include_bytes!("./circuit.json");
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
-        Self {
-            lib: parsed,
-            n: 0,
-        }
+        Self { lib: parsed, n: 0 }
     }
 }
 
@@ -89,17 +86,40 @@ fn parse_number(v: &Value) -> Option<f32> {
     }
 }
 
-/// Apply Affine2 transformation to Pos2 coordinate
-fn apply_affine2(v: &Pos2, a: &Affine2) -> Pos2 {
-    let p = a.transform_point2(Vec2::new(v.x, v.y));
-    return Pos2::new(p.x, p.y);
+struct Transform {
+    scale: f32,
+    rotate: f32,
+    translate: Pos2,
+}
+
+impl Transform {
+    fn new(scale: f32, rotate: f32, translate_x: f32, translate_y: f32) -> Self {
+        Self {
+            scale,
+            rotate,
+            translate: Pos2::new(translate_x, translate_y),
+        }
+    }
+    fn apply(&self, a: &Pos2) -> Pos2 {
+        let c = self.rotate.cos();
+        let s = self.rotate.sin();
+        return Pos2::new(
+            (a.x * c - a.y * s) * self.scale + self.translate.x,
+            (a.x * s + a.y * c) * self.scale + self.translate.y,
+        );
+    }
+    fn apply_scalar(&self, a: f32) -> f32 {
+        return self.scale * a;
+    }
 }
 
 /// Helper function for draw_to_shape
 // Turns one line of DRAW section into a Shape
-fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<Shape> {
+fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option<Shape> {
     let a = v.as_array().unwrap();
     let tag = &a[0];
+    let w_fine_orig = 2.0;
+    let w_fine = transform.apply_scalar(w_fine_orig);
     if tag.is_string() {
         let ts = tag.as_str().unwrap();
         match ts {
@@ -110,24 +130,27 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
                 r = parse_number(&a[3]).unwrap();
                 w = parse_number(&a[6]).unwrap();
                 if a[7].as_str().unwrap() == "N" {
-                    let c = apply_affine2(&Pos2::new(x, y), &transform);
+                    let c = transform.apply(&Pos2::new(x, y));
+                    let r = transform.apply_scalar(r);
+                    let w = transform.apply_scalar(w);
                     return Some(Shape::circle_stroke(c, r, Stroke::new(w, color)));
                 }
-            },
+            }
             "P" => {
                 let (n, w);
                 n = parse_number(&a[1]).unwrap() as usize;
-                // Get width, make sure it is at least 1.0 (0 means 1 pixel wide)
-                w = parse_number(&a[4]).unwrap().max(2.0);
+                // Get width, make sure it is at least 1.0 (0 in lib means 1 pixel wide)
+                w = parse_number(&a[4]).unwrap().max(w_fine_orig);
+                let w = transform.apply_scalar(w);
                 let mut v: std::vec::Vec<Pos2> = vec![];
                 for i in 0..n {
                     let (x, y);
                     x = parse_number(&a[5 + 2 * i]).unwrap();
                     y = parse_number(&a[6 + 2 * i]).unwrap();
-                    let c = apply_affine2(&Pos2::new(x, y), &transform);
+                    let c = transform.apply(&Pos2::new(x, y));
                     v.push(c);
                 }
-                let filled = a[5 + 2 * n].as_str().unwrap() == "F" && w == 2.0;
+                let filled = a[5 + 2 * n].as_str().unwrap() == "F" && w == w_fine;
                 if filled {
                     return Some(Shape::convex_polygon(v, color, Stroke::default()));
                 } else {
@@ -144,14 +167,14 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
                     }
                     return Some(Shape::Vec(res));
                 }
-            },
+            }
             "X" => {
                 let (x, y, l, d, w);
                 x = parse_number(&a[3]).unwrap();
                 y = parse_number(&a[4]).unwrap();
                 l = parse_number(&a[5]).unwrap();
                 d = a[6].as_str().unwrap();
-                w = 2.0;
+                w = w_fine;
                 let vl = match d {
                     "U" => Pos2::new(0.0, 1.0),
                     "D" => Pos2::new(0.0, -1.0),
@@ -159,10 +182,10 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
                     "R" => Pos2::new(1.0, 0.0),
                     &_ => unreachable!(),
                 };
-                let c1 = apply_affine2(&Pos2::new(x, y), &transform);
-                let c2 = apply_affine2(&Pos2::new(x + l * vl.x, y + l * vl.y), &transform);
-                return Some(Shape::line_segment([c1, c2], Stroke::new(w, color)))
-            },
+                let c1 = transform.apply(&Pos2::new(x, y));
+                let c2 = transform.apply(&Pos2::new(x + l * vl.x, y + l * vl.y));
+                return Some(Shape::line_segment([c1, c2], Stroke::new(w, color)));
+            }
             &_ => return None,
         }
     }
@@ -170,7 +193,7 @@ fn drawline_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Option<S
 }
 
 /// Given DRAW JSON value, turn section into single Shape for drawing
-fn draw_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Shape {
+fn draw_to_shape(v: &Value, transform: &Transform, color: Color32) -> Shape {
     let mut shapes = vec![];
     let n = v.as_array().unwrap().len();
     for i in 0..n {
@@ -182,7 +205,7 @@ fn draw_to_shape(v: &Value, transform: &Affine2, color: Color32) -> Shape {
 }
 
 /// Find pad positions of symbol, given DRAW section
-fn draw_to_padpos(v: &Value, transform: &Affine2) -> Vec<Pos2> {
+fn draw_to_padpos(v: &Value, transform: &Transform) -> Vec<Pos2> {
     let mut res = vec![];
     let n = v.as_array().unwrap().len();
     for i in 0..n {
@@ -195,7 +218,7 @@ fn draw_to_padpos(v: &Value, transform: &Affine2) -> Vec<Pos2> {
             let (x, y);
             x = parse_number(&a[3]).unwrap();
             y = parse_number(&a[4]).unwrap();
-            res.push(apply_affine2(&Pos2::new(x, y), transform));
+            res.push(transform.apply(&Pos2::new(x, y)));
         }
     }
     return res;
@@ -219,15 +242,16 @@ impl eframe::App for MyApp {
             if self.n > max_n {
                 self.n = max_n;
             }
+            let partname = &nth[1][1].as_str().unwrap();
+            ui.add(egui::Label::new(*partname));
             if ui.add(egui::Button::new("Show draw")).clicked() {
-                let partname = &nth[1][1].as_str().unwrap();
                 println!("================  {}  ==========", partname);
                 for i in draw.as_array().unwrap() {
                     println!("{:?}", i);
                 }
             }
             let painter = ui.painter();
-            let transform = Affine2::from_scale_angle_translation(Vec2::new(1.0, 1.0), 3.14159*0.0, Vec2::new(300.0, 250.0));
+            let transform = Transform::new(0.5, 0.0, 500.0, 450.0);
             let color = Color32::WHITE;
             let lead_color = Color32::YELLOW;
             painter.add(draw_to_shape(&draw, &transform, color));
