@@ -2,7 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
 
-use crate::egui::{Color32, Pos2, Shape, Stroke};
+use crate::egui::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
 use eframe::egui;
 use glam::{Affine2, Vec2};
 use serde_json::Value;
@@ -185,6 +185,20 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 let c1 = transform.apply(&Pos2::new(x, y));
                 let c2 = transform.apply(&Pos2::new(x + l * vl.x, y + l * vl.y));
                 return Some(Shape::line_segment([c1, c2], Stroke::new(w, color)));
+            }
+            "S" => {
+                let (sx, sy, ex, ey, w);
+                sx = parse_number(&a[1]).unwrap();
+                sy = parse_number(&a[2]).unwrap();
+                ex = parse_number(&a[3]).unwrap();
+                ey = parse_number(&a[4]).unwrap();
+                w = parse_number(&a[7]).unwrap().max(w_fine_orig);
+                let w = transform.apply_scalar(w);
+                // Order x and y values because lib files are not consistent in ordering
+                let c1 = transform.apply(&Pos2::new(sx.min(ex), sy.min(ey)));
+                let c2 = transform.apply(&Pos2::new(sx.max(ex), sy.max(ey)));
+                let s = Shape::rect_stroke(Rect::from_min_max(c1, c2), 0.0, Stroke::new(w, color), StrokeKind::Middle);
+                return Some(s);
             }
             &_ => return None,
         }
