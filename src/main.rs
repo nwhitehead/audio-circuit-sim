@@ -4,7 +4,6 @@
 
 use crate::egui::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
 use eframe::egui;
-use glam::{Affine2, Vec2};
 use serde_json::Value;
 
 fn main() -> Result<(), eframe::Error> {
@@ -35,7 +34,9 @@ impl Default for MyApp {
     fn default() -> Self {
         let bytes = include_bytes!("./circuit.json");
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
-        Self { lib: parsed, n: 0 }
+        // 199 is L
+        // 269 is next set of L
+        Self { lib: parsed, n: 199 }
     }
 }
 
@@ -123,7 +124,30 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
     if tag.is_string() {
         let ts = tag.as_str().unwrap();
         match ts {
+            "A" => {
+                // Arc
+                let (x, y, r, angle_start, angle_end, w);
+                x = parse_number(&a[1]).unwrap();
+                y = parse_number(&a[2]).unwrap();
+                r = parse_number(&a[3]).unwrap();
+                // Angles measured in 1/10s of degrees
+                angle_start = parse_number(&a[4]).unwrap() / 10.0 / 360.0 * 2.0 * 3.14159265;
+                angle_end = parse_number(&a[5]).unwrap() / 10.0 / 360.0 * 2.0 * 3.14159265;
+                w = parse_number(&a[8]).unwrap().max(w_fine_orig);
+                let w = transform.apply_scalar(w);
+                let mut v: std::vec::Vec<Pos2> = vec![];
+                let num = 10;
+                for i in 0..num + 1 {
+                    let a = angle_start + (i as f32 / num as f32) * (angle_end - angle_start);
+                    let xx = a.cos() * r + x;
+                    let yy = a.sin() * r + y;        
+                    let c = transform.apply(&Pos2::new(xx, yy));
+                    v.push(c);
+                }
+                return Some(Shape::line(v, Stroke::new(w, color)));
+            }
             "C" => {
+                // Circle
                 let (x, y, r, w);
                 x = parse_number(&a[1]).unwrap();
                 y = parse_number(&a[2]).unwrap();
@@ -137,6 +161,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 }
             }
             "P" => {
+                // Polyline
                 let (n, w);
                 n = parse_number(&a[1]).unwrap() as usize;
                 // Get width, make sure it is at least 1.0 (0 in lib means 1 pixel wide)
@@ -168,7 +193,23 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                     return Some(Shape::Vec(res));
                 }
             }
+            "S" => {
+                // Rectangle
+                let (sx, sy, ex, ey, w);
+                sx = parse_number(&a[1]).unwrap();
+                sy = parse_number(&a[2]).unwrap();
+                ex = parse_number(&a[3]).unwrap();
+                ey = parse_number(&a[4]).unwrap();
+                w = parse_number(&a[7]).unwrap().max(w_fine_orig);
+                let w = transform.apply_scalar(w);
+                // Order x and y values because lib files are not consistent in ordering
+                let c1 = transform.apply(&Pos2::new(sx.min(ex), sy.min(ey)));
+                let c2 = transform.apply(&Pos2::new(sx.max(ex), sy.max(ey)));
+                let s = Shape::rect_stroke(Rect::from_min_max(c1, c2), 0.0, Stroke::new(w, color), StrokeKind::Middle);
+                return Some(s);
+            }
             "X" => {
+                // Pin
                 let (x, y, l, d, w);
                 x = parse_number(&a[3]).unwrap();
                 y = parse_number(&a[4]).unwrap();
@@ -185,20 +226,6 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 let c1 = transform.apply(&Pos2::new(x, y));
                 let c2 = transform.apply(&Pos2::new(x + l * vl.x, y + l * vl.y));
                 return Some(Shape::line_segment([c1, c2], Stroke::new(w, color)));
-            }
-            "S" => {
-                let (sx, sy, ex, ey, w);
-                sx = parse_number(&a[1]).unwrap();
-                sy = parse_number(&a[2]).unwrap();
-                ex = parse_number(&a[3]).unwrap();
-                ey = parse_number(&a[4]).unwrap();
-                w = parse_number(&a[7]).unwrap().max(w_fine_orig);
-                let w = transform.apply_scalar(w);
-                // Order x and y values because lib files are not consistent in ordering
-                let c1 = transform.apply(&Pos2::new(sx.min(ex), sy.min(ey)));
-                let c2 = transform.apply(&Pos2::new(sx.max(ex), sy.max(ey)));
-                let s = Shape::rect_stroke(Rect::from_min_max(c1, c2), 0.0, Stroke::new(w, color), StrokeKind::Middle);
-                return Some(s);
             }
             &_ => return None,
         }
