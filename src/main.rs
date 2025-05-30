@@ -295,7 +295,7 @@ impl eframe::App for MyApp {
                 }
             }
             let painter = ui.painter();
-            let transform = Transform::new(0.5, 0.0, 500.0, 450.0);
+            let transform = Transform::new(1.0, 0.0, 500.0, 450.0);
             let color = Color32::WHITE;
             let lead_color = Color32::YELLOW;
             painter.add(draw_to_shape(&draw, &transform, color));
