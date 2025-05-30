@@ -36,7 +36,7 @@ impl Default for MyApp {
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         // 199 is L
         // 269 is next set of L
-        Self { lib: parsed, n: 199 }
+        Self { lib: parsed, n: 0 }
     }
 }
 
@@ -278,6 +278,9 @@ impl eframe::App for MyApp {
             }
             if ui.add(egui::Button::new("Next symbol")).clicked() {
                 self.n += 1;
+            }
+            if ui.add(egui::Button::new("Next +50 symbol")).clicked() {
+                self.n += 50;
             }
             let max_n = self.lib.as_array().unwrap().len() - 1;
             if self.n > max_n {
