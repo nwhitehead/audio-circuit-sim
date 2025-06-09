@@ -6,6 +6,29 @@ use crate::egui::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
 use eframe::egui;
 use serde_json::Value;
 
+enum ComponentType {
+    Capacitor, Diode, LED, OpAmp, TransistorNPN, TransistorPNP, Resistor, Potentiometer,
+}
+
+fn string_to_componenttype(n: &str) -> Option<ComponentType> {
+    match n {
+        "C" => Some(ComponentType::Capacitor),
+        "D" => Some(ComponentType::Diode),
+        "LED" => Some(ComponentType::LED),
+        "Opamp_Dual" => Some(ComponentType::OpAmp),
+        "Q_NPN_BCE" => Some(ComponentType::TransistorNPN),
+        "Q_PNP_BCE" => Some(ComponentType::TransistorPNP),
+        "R" => Some(ComponentType::Resistor),
+        "R_Potentiometer" => Some(ComponentType::Potentiometer),
+        &_ => None,
+    }
+}
+
+struct Component {
+    component_type: ComponentType,
+    draw_instructions: Value,
+}
+
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -26,7 +49,7 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 struct MyApp {
-    lib: serde_json::Value,
+    lib: Value,
     n: usize,
 }
 
@@ -34,6 +57,11 @@ impl Default for MyApp {
     fn default() -> Self {
         let bytes = include_bytes!("./circuit.json");
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
+        for elem in parsed.as_array().unwrap() {
+            let el = elem[1][0].clone();
+            println!("{:?}", el);
+        }
+
         // 199 is L
         // 269 is next set of L
         Self { lib: parsed, n: 0 }
@@ -250,7 +278,6 @@ fn draw_to_padpos(v: &Value, transform: &Transform) -> Vec<Pos2> {
     let mut res = vec![];
     let n = v.as_array().unwrap().len();
     for i in 0..n {
-        let color = Color32::WHITE;
         let vi = &v[i];
         let a = vi.as_array().unwrap();
         let tag = &a[0];
