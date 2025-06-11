@@ -6,20 +6,44 @@ use crate::egui::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
 use eframe::egui;
 use serde_json::Value;
 
+#[derive(Debug)]
 enum ComponentType {
-    Capacitor, Diode, LED, OpAmp, TransistorNPN, TransistorPNP, Resistor, Potentiometer,
+    Capacitor,
+    Diode,
+    DiodeSchottky,
+    DiodeZener,
+    Inductor,
+    Led,
+    OpAmp,
+    TransistorNPN,
+    TransistorNPNDarlington,
+    TransistorPNP,
+    TransistorPNPDarlington,
+    Resistor,
+    ResistorUS,
+    Potentiometer,
+    PotentiometerUS,
+    VoltmeterDC,
 }
 
 fn string_to_componenttype(n: &str) -> Option<ComponentType> {
     match n {
         "C" => Some(ComponentType::Capacitor),
         "D" => Some(ComponentType::Diode),
-        "LED" => Some(ComponentType::LED),
+        "D_Schottky" => Some(ComponentType::DiodeSchottky),
+        "D_Zener" => Some(ComponentType::DiodeZener),
+        "L" => Some(ComponentType::Inductor),
+        "LED" => Some(ComponentType::Led),
         "Opamp_Dual" => Some(ComponentType::OpAmp),
         "Q_NPN_BCE" => Some(ComponentType::TransistorNPN),
+        "Q_NPN_Darlington_BCE" => Some(ComponentType::TransistorNPNDarlington),
         "Q_PNP_BCE" => Some(ComponentType::TransistorPNP),
+        "Q_PNP_Darlington_BCE" => Some(ComponentType::TransistorPNPDarlington),
         "R" => Some(ComponentType::Resistor),
         "R_Potentiometer" => Some(ComponentType::Potentiometer),
+        "R_US" => Some(ComponentType::ResistorUS),
+        "R_Potentiometer_US" => Some(ComponentType::PotentiometerUS),
+        "Voltmeter_DC" => Some(ComponentType::VoltmeterDC),
         &_ => None,
     }
 }
@@ -58,8 +82,11 @@ impl Default for MyApp {
         let bytes = include_bytes!("./circuit.json");
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         for elem in parsed.as_array().unwrap() {
-            let el = elem[1][0].clone();
-            println!("{:?}", el);
+            let name = elem[1][1][1]
+                .as_str()
+                .expect("Could not parse string in library");
+            let comp = string_to_componenttype(name).expect("Unknown component type");
+            println!("{:?}", comp);
         }
 
         // 199 is L
@@ -168,7 +195,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 for i in 0..num + 1 {
                     let a = angle_start + (i as f32 / num as f32) * (angle_end - angle_start);
                     let xx = a.cos() * r + x;
-                    let yy = a.sin() * r + y;        
+                    let yy = a.sin() * r + y;
                     let c = transform.apply(&Pos2::new(xx, yy));
                     v.push(c);
                 }
@@ -233,7 +260,12 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 // Order x and y values because lib files are not consistent in ordering
                 let c1 = transform.apply(&Pos2::new(sx.min(ex), sy.min(ey)));
                 let c2 = transform.apply(&Pos2::new(sx.max(ex), sy.max(ey)));
-                let s = Shape::rect_stroke(Rect::from_min_max(c1, c2), 0.0, Stroke::new(w, color), StrokeKind::Middle);
+                let s = Shape::rect_stroke(
+                    Rect::from_min_max(c1, c2),
+                    0.0,
+                    Stroke::new(w, color),
+                    StrokeKind::Middle,
+                );
                 return Some(s);
             }
             "X" => {
