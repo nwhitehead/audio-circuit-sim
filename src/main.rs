@@ -6,7 +6,7 @@ use crate::egui::{Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
 use eframe::egui;
 use serde_json::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 enum ComponentType {
     Capacitor,
     Diode,
@@ -48,10 +48,8 @@ fn string_to_componenttype(n: &str) -> Option<ComponentType> {
     }
 }
 
-struct Component {
-    component_type: ComponentType,
-    draw_instructions: Value,
-}
+/// Maps component type into draw instructions
+type ComponentDrawLibrary = std::collections::HashMap<ComponentType, Value>;
 
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
@@ -75,10 +73,12 @@ fn main() -> Result<(), eframe::Error> {
 struct MyApp {
     lib: Value,
     n: usize,
+    draw_lib: ComponentDrawLibrary,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
+        let mut draw_lib = ComponentDrawLibrary::new();
         let bytes = include_bytes!("./circuit.json");
         let parsed: Value = serde_json::from_slice(bytes).unwrap();
         for elem in parsed.as_array().unwrap() {
@@ -87,11 +87,16 @@ impl Default for MyApp {
                 .expect("Could not parse string in library");
             let comp = string_to_componenttype(name).expect("Unknown component type");
             println!("{:?}", comp);
+            draw_lib.insert(comp, find_draw(&elem[1]).expect("Could not find DRAW line in library").clone());
         }
 
         // 199 is L
         // 269 is next set of L
-        Self { lib: parsed, n: 0 }
+        Self {
+            lib: parsed,
+            n: 0,
+            draw_lib,
+        }
     }
 }
 
