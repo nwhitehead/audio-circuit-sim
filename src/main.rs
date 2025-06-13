@@ -52,6 +52,7 @@ fn string_to_componenttype(n: &str) -> Option<ComponentType> {
 /// Maps component type into draw instructions
 type ComponentDrawLibrary = std::collections::HashMap<ComponentType, Value>;
 
+#[derive(Debug)]
 struct GraphicalComponent {
     component_type: ComponentType,
     position: Pos2,
@@ -87,8 +88,6 @@ fn main() -> Result<(), eframe::Error> {
 }
 
 struct MyApp {
-    lib: Value,
-    n: usize,
     draw_lib: ComponentDrawLibrary,
     graphical_parts: Vec<GraphicalComponent>,
 }
@@ -111,12 +110,11 @@ impl Default for MyApp {
                     .clone(),
             );
         }
-        let n = 0;
         let graphical_parts = vec![
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
         ];
 
-        Self { lib, n, draw_lib, graphical_parts }
+        Self { draw_lib, graphical_parts }
     }
 }
 
@@ -351,41 +349,19 @@ fn draw_to_padpos(v: &Value, transform: &Transform) -> Vec<Pos2> {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let nth = &self.lib[self.n][1];
-        let draw = find_draw(&nth).unwrap();
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(heading("Circuit"));
-            if ui.add(egui::Button::new("Prev symbol")).clicked() {
-                if self.n > 0 {
-                    self.n -= 1;
-                }
-            }
-            if ui.add(egui::Button::new("Next symbol")).clicked() {
-                self.n += 1;
-            }
-            if ui.add(egui::Button::new("Next +50 symbol")).clicked() {
-                self.n += 50;
-            }
-            let max_n = self.lib.as_array().unwrap().len() - 1;
-            if self.n > max_n {
-                self.n = max_n;
-            }
-            let partname = &nth[1][1].as_str().unwrap();
-            ui.add(egui::Label::new(*partname));
-            if ui.add(egui::Button::new("Show draw")).clicked() {
-                println!("================  {}  ==========", partname);
-                for i in draw.as_array().unwrap() {
-                    println!("{:?}", i);
-                }
-            }
             let painter = ui.painter();
             let transform = Transform::new(1.0, 0.0, 500.0, 450.0);
             let color = Color32::WHITE;
             let lead_color = Color32::YELLOW;
-            painter.add(draw_to_shape(&draw, &transform, color));
-            let leads = draw_to_padpos(&draw, &transform);
-            for lead in leads {
-                painter.add(Shape::circle_filled(lead, 5.0, lead_color));
+            for component in &self.graphical_parts {
+                let draw_instr = &self.draw_lib[&component.component_type];
+                painter.add(draw_to_shape(&draw_instr, &transform, color));
+                let leads = draw_to_padpos(&draw_instr, &transform);
+                for lead in leads {
+                    painter.add(Shape::circle_filled(lead, 5.0, lead_color));
+                }
             }
         });
     }
