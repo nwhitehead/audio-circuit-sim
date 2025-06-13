@@ -112,6 +112,7 @@ impl Default for MyApp {
         }
         let graphical_parts = vec![
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
+            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(300.0, 200.0), 0.0),
         ];
 
         Self { draw_lib, graphical_parts }
@@ -178,6 +179,10 @@ impl Transform {
             rotate,
             translate: Pos2::new(translate_x, translate_y),
         }
+    }
+    /// Chain two transforms into one transform (order is other then this one)
+    fn chain(&self, other: &Self) -> Self {
+        Transform::new(self.scale * other.scale, self.rotate + other.rotate, self.translate.x + other.translate.x, self.translate.y + other.translate.y)
     }
     fn apply(&self, a: &Pos2) -> Pos2 {
         let c = self.rotate.cos();
@@ -352,11 +357,12 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(heading("Circuit"));
             let painter = ui.painter();
-            let transform = Transform::new(1.0, 0.0, 500.0, 450.0);
             let color = Color32::WHITE;
             let lead_color = Color32::YELLOW;
+            let global_transform = Transform::new(1.0, 0.0, 0.0, 0.0);
             for component in &self.graphical_parts {
                 let draw_instr = &self.draw_lib[&component.component_type];
+                let transform = global_transform.chain(&Transform::new(1.0, 3.14159*0.1, component.position.x, component.position.y));
                 painter.add(draw_to_shape(&draw_instr, &transform, color));
                 let leads = draw_to_padpos(&draw_instr, &transform);
                 for lead in leads {
