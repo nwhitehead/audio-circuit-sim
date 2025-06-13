@@ -24,6 +24,7 @@ enum ComponentType {
     Potentiometer,
     PotentiometerUS,
     VoltmeterDC,
+    Wire,
 }
 
 fn string_to_componenttype(n: &str) -> Option<ComponentType> {
@@ -51,6 +52,21 @@ fn string_to_componenttype(n: &str) -> Option<ComponentType> {
 /// Maps component type into draw instructions
 type ComponentDrawLibrary = std::collections::HashMap<ComponentType, Value>;
 
+struct GraphicalComponent {
+    component_type: ComponentType,
+    position: Pos2,
+    angle: f32,
+}
+
+impl GraphicalComponent {
+    fn new(component_type: ComponentType, position: Pos2, angle: f32) -> Self {
+        Self {
+            component_type,
+            position,
+            angle,
+        }
+    }
+}
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
 
@@ -74,6 +90,7 @@ struct MyApp {
     lib: Value,
     n: usize,
     draw_lib: ComponentDrawLibrary,
+    graphical_parts: Vec<GraphicalComponent>,
 }
 
 impl Default for MyApp {
@@ -95,8 +112,11 @@ impl Default for MyApp {
             );
         }
         let n = 0;
+        let graphical_parts = vec![
+            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
+        ];
 
-        Self { lib, n, draw_lib }
+        Self { lib, n, draw_lib, graphical_parts }
     }
 }
 
