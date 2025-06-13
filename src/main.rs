@@ -285,16 +285,27 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 ey = parse_number(&a[4]).unwrap();
                 w = parse_number(&a[7]).unwrap().max(w_fine_orig);
                 let w = transform.apply_scalar(w);
-                // Order x and y values because lib files are not consistent in ordering
-                let c1 = transform.apply(&Pos2::new(sx.min(ex), sy.min(ey)));
-                let c2 = transform.apply(&Pos2::new(sx.max(ex), sy.max(ey)));
-                let s = Shape::rect_stroke(
-                    Rect::from_min_max(c1, c2),
-                    0.0,
-                    Stroke::new(w, color),
-                    StrokeKind::Middle,
-                );
-                return Some(s);
+
+                // Create vector with points on rectangle
+                let v = vec![
+                    transform.apply(&Pos2::new(sx, sy)),
+                    transform.apply(&Pos2::new(ex, sy)),
+                    transform.apply(&Pos2::new(ex, ey)),
+                    transform.apply(&Pos2::new(sx, ey)),
+                    transform.apply(&Pos2::new(sx, sy)),
+                ];
+                // Add individual line segments connecting pairs.
+                // This avoids jagged connectors that extend beyond radius of line bend.
+                let mut res = vec![];
+                for i in 0..v.len() - 1 {
+                    res.push(Shape::line_segment([v[i], v[i + 1]], Stroke::new(w, color)));
+                }
+                // Add circles to connect lines.
+                // Smaller than width / 2 to make it visually look better.
+                for p in v {
+                    res.push(Shape::circle_filled(p, w * 0.48, color));
+                }
+                return Some(Shape::Vec(res));
             }
             "X" => {
                 // Pin
