@@ -200,12 +200,14 @@ impl Transform {
 }
 
 /// Helper function for draw_to_shape
-// Turns one line of DRAW section into a Shape
-fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option<Shape> {
+// Turns one line of DRAW section into a (Shape, Shape)
+// Pair is base layer, then pad layer (on top)
+fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color: Color32, pad_size: f32) -> (Option<Shape>, Option<Shape>) {
     let a = v.as_array().unwrap();
     let tag = &a[0];
     let w_fine_orig = 2.0;
     let w_fine = transform.apply_scalar(w_fine_orig);
+    let pad_size = transform.apply_scalar(pad_size);
     if tag.is_string() {
         let ts = tag.as_str().unwrap();
         match ts {
@@ -229,7 +231,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                     let c = transform.apply(&Pos2::new(xx, yy));
                     v.push(c);
                 }
-                return Some(Shape::line(v, Stroke::new(w, color)));
+                return (Some(Shape::line(v, Stroke::new(w, color))), None);
             }
             "C" => {
                 // Circle
@@ -242,7 +244,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                     let c = transform.apply(&Pos2::new(x, y));
                     let r = transform.apply_scalar(r);
                     let w = transform.apply_scalar(w);
-                    return Some(Shape::circle_stroke(c, r, Stroke::new(w, color)));
+                    return (Some(Shape::circle_stroke(c, r, Stroke::new(w, color))), None);
                 }
             }
             "P" => {
@@ -262,7 +264,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 }
                 let filled = a[5 + 2 * n].as_str().unwrap() == "F" && w == w_fine;
                 if filled {
-                    return Some(Shape::convex_polygon(v, color, Stroke::default()));
+                    return (Some(Shape::convex_polygon(v, color, Stroke::default())), None);
                 } else {
                     let mut res = vec![];
                     // Add individual line segments connecting pairs.
@@ -275,7 +277,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                     for p in v {
                         res.push(Shape::circle_filled(p, w * 0.48, color));
                     }
-                    return Some(Shape::Vec(res));
+                    return (Some(Shape::Vec(res)), None);
                 }
             }
             "S" => {
@@ -307,7 +309,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 for p in v {
                     res.push(Shape::circle_filled(p, w * 0.48, color));
                 }
-                return Some(Shape::Vec(res));
+                return (Some(Shape::Vec(res)), None);
             }
             "X" => {
                 // Pin
@@ -326,53 +328,30 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32) -> Option
                 };
                 let c1 = transform.apply(&Pos2::new(x, y));
                 let c2 = transform.apply(&Pos2::new(x + l * vl.x, y + l * vl.y));
-                return Some(Shape::line_segment([c1, c2], Stroke::new(w, color)));
+                return (Some(Shape::line_segment([c1, c2], Stroke::new(w, color))), Some(Shape::circle_filled(c1, pad_size, pad_color)));
             }
-            &_ => return None,
+            &_ => return (None, None),
         }
     }
-    return None;
+    return (None, None);
 }
 
 /// Given DRAW JSON value, turn section into single Shape for drawing
-fn draw_to_shape(v: &Value, transform: &Transform, color: Color32) -> Shape {
-    let mut shapes = vec![];
+fn draw_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color: Color32, pad_size: f32) -> Shape {
+    let mut lower_shapes = vec![];
+    let mut upper_shapes = vec![];
     let n = v.as_array().unwrap().len();
     for i in 0..n {
-        if let Some(s) = drawline_to_shape(&v[i], &transform, color) {
-            shapes.push(s);
+        let shape = drawline_to_shape(&v[i], &transform, color, pad_color, pad_size);
+        if let (Some(s), _) = shape {
+            lower_shapes.push(s);
+        }
+        if let (_, Some(s)) = shape {
+            upper_shapes.push(s);
         }
     }
-    return Shape::Vec(shapes);
-}
-
-/// Find pad positions of symbol, given DRAW section
-fn draw_to_padpos(v: &Value, transform: &Transform) -> Vec<Pos2> {
-    let mut res = vec![];
-    let n = v.as_array().unwrap().len();
-    for i in 0..n {
-        let vi = &v[i];
-        let a = vi.as_array().unwrap();
-        let tag = &a[0];
-        let ts = tag.as_str().unwrap();
-        if ts == "X" {
-            let (x, y);
-            x = parse_number(&a[3]).unwrap();
-            y = parse_number(&a[4]).unwrap();
-            res.push(transform.apply(&Pos2::new(x, y)));
-        }
-    }
-    return res;
-}
-
-fn draw_to_padshape(v: &Value, transform: &Transform, color: Color32, size: f32) -> Shape {
-    let pos_vec = draw_to_padpos(v, transform);
-    let size = transform.apply_scalar(size);
-    let mut res = vec![];
-    for pos in pos_vec {
-        res.push(Shape::circle_filled(pos, size, color));
-    }
-    return Shape::Vec(res);
+    lower_shapes.append(&mut upper_shapes);
+    return Shape::Vec(lower_shapes);
 }
 
 impl eframe::App for MyApp {
@@ -381,13 +360,13 @@ impl eframe::App for MyApp {
             ui.add(heading("Circuit"));
             let painter = ui.painter();
             let color = Color32::WHITE;
-            let lead_color = Color32::YELLOW;
+            let pad_color = Color32::YELLOW;
+            let pad_size = 10.0;
             let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0);
             for component in &self.graphical_parts {
                 let draw_instr = &self.draw_lib[&component.component_type];
                 let transform = global_transform.chain(&Transform::new(1.0, 3.14159 * 0.5 * component.angle, component.position.x, component.position.y));
-                painter.add(draw_to_shape(&draw_instr, &transform, color));
-                painter.add(draw_to_padshape(&draw_instr, &transform, lead_color, 5.0));
+                painter.add(draw_to_shape(&draw_instr, &transform, color, pad_color, pad_size));
             }
         });
     }
