@@ -56,6 +56,7 @@ type ComponentDrawLibrary = std::collections::HashMap<ComponentType, Value>;
 struct GraphicalComponent {
     component_type: ComponentType,
     position: Pos2,
+    // in 90 degree chunks
     angle: f32,
 }
 
@@ -112,7 +113,8 @@ impl Default for MyApp {
         }
         let graphical_parts = vec![
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
-            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(300.0, 200.0), 0.0),
+            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(500.0, 50.0), 1.0),
+            GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 500.0), 0.0),
         ];
 
         Self { draw_lib, graphical_parts }
@@ -363,6 +365,16 @@ fn draw_to_padpos(v: &Value, transform: &Transform) -> Vec<Pos2> {
     return res;
 }
 
+fn draw_to_padshape(v: &Value, transform: &Transform, color: Color32, size: f32) -> Shape {
+    let pos_vec = draw_to_padpos(v, transform);
+    let size = transform.apply_scalar(size);
+    let mut res = vec![];
+    for pos in pos_vec {
+        res.push(Shape::circle_filled(pos, size, color));
+    }
+    return Shape::Vec(res);
+}
+
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -370,15 +382,12 @@ impl eframe::App for MyApp {
             let painter = ui.painter();
             let color = Color32::WHITE;
             let lead_color = Color32::YELLOW;
-            let global_transform = Transform::new(1.0, 0.0, 0.0, 0.0);
+            let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0);
             for component in &self.graphical_parts {
                 let draw_instr = &self.draw_lib[&component.component_type];
-                let transform = global_transform.chain(&Transform::new(1.0, 3.14159*0.1, component.position.x, component.position.y));
+                let transform = global_transform.chain(&Transform::new(1.0, 3.14159 * 0.5 * component.angle, component.position.x, component.position.y));
                 painter.add(draw_to_shape(&draw_instr, &transform, color));
-                let leads = draw_to_padpos(&draw_instr, &transform);
-                for lead in leads {
-                    painter.add(Shape::circle_filled(lead, 5.0, lead_color));
-                }
+                painter.add(draw_to_padshape(&draw_instr, &transform, lead_color, 5.0));
             }
         });
     }
