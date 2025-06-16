@@ -115,6 +115,7 @@ impl Default for MyApp {
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(500.0, 50.0), 1.0),
             GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 500.0), 0.0),
+            GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 200.0), 0.0),
         ];
 
         Self { draw_lib, graphical_parts }
@@ -215,7 +216,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 // Arc
                 let (x, y, r, angle_start, angle_end, w);
                 x = parse_number(&a[1]).unwrap();
-                y = parse_number(&a[2]).unwrap();
+                y = -parse_number(&a[2]).unwrap();
                 r = parse_number(&a[3]).unwrap();
                 // Angles measured in 1/10s of degrees
                 angle_start = parse_number(&a[4]).unwrap() / 10.0 / 360.0 * 2.0 * 3.14159265;
@@ -237,7 +238,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 // Circle
                 let (x, y, r, w);
                 x = parse_number(&a[1]).unwrap();
-                y = parse_number(&a[2]).unwrap();
+                y = -parse_number(&a[2]).unwrap();
                 r = parse_number(&a[3]).unwrap();
                 w = parse_number(&a[6]).unwrap();
                 if a[7].as_str().unwrap() == "N" {
@@ -258,7 +259,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 for i in 0..n {
                     let (x, y);
                     x = parse_number(&a[5 + 2 * i]).unwrap();
-                    y = parse_number(&a[6 + 2 * i]).unwrap();
+                    y = -parse_number(&a[6 + 2 * i]).unwrap();
                     let c = transform.apply(&Pos2::new(x, y));
                     v.push(c);
                 }
@@ -284,9 +285,9 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 // Rectangle
                 let (sx, sy, ex, ey, w);
                 sx = parse_number(&a[1]).unwrap();
-                sy = parse_number(&a[2]).unwrap();
+                sy = -parse_number(&a[2]).unwrap();
                 ex = parse_number(&a[3]).unwrap();
-                ey = parse_number(&a[4]).unwrap();
+                ey = -parse_number(&a[4]).unwrap();
                 w = parse_number(&a[7]).unwrap().max(w_fine_orig);
                 let w = transform.apply_scalar(w);
 
@@ -315,13 +316,13 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 // Pin
                 let (x, y, l, d, w);
                 x = parse_number(&a[3]).unwrap();
-                y = parse_number(&a[4]).unwrap();
+                y = -parse_number(&a[4]).unwrap();
                 l = parse_number(&a[5]).unwrap();
                 d = a[6].as_str().unwrap();
                 w = w_fine;
                 let vl = match d {
-                    "U" => Pos2::new(0.0, 1.0),
-                    "D" => Pos2::new(0.0, -1.0),
+                    "U" => Pos2::new(0.0, -1.0),
+                    "D" => Pos2::new(0.0, 1.0),
                     "L" => Pos2::new(-1.0, 0.0),
                     "R" => Pos2::new(1.0, 0.0),
                     &_ => unreachable!(),
@@ -336,7 +337,7 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
     return (None, None);
 }
 
-/// Given DRAW JSON value, turn section into single Shape for drawing
+/// Given DRAW JSON value, turn section into single Shape for drawing (including pads)
 fn draw_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color: Color32, pad_size: f32) -> Shape {
     let mut lower_shapes = vec![];
     let mut upper_shapes = vec![];
