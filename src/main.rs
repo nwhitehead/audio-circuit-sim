@@ -69,8 +69,13 @@ impl GraphicalComponent {
         }
     }
 }
+
 fn main() -> Result<(), eframe::Error> {
     env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+
+    let pos2 = Pos2::new(1.0, 0.0);
+    let t = Transform::new(0.3, 0.5 * 3.14159265, 10.0, 5.0, false, false);
+    println!("t = {:?}", t);
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 600.0]),
@@ -118,7 +123,10 @@ impl Default for MyApp {
             GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 200.0), 0.0),
         ];
 
-        Self { draw_lib, graphical_parts }
+        Self {
+            draw_lib,
+            graphical_parts,
+        }
     }
 }
 
@@ -169,23 +177,31 @@ fn parse_number(v: &Value) -> Option<f32> {
     }
 }
 
-struct Transform {
+#[derive(Clone, Debug)]
+struct SingleTransform {
     scale: f32,
     rotate: f32,
     translate: Pos2,
+    flip_x: bool,
+    flip_y: bool,
 }
 
-impl Transform {
-    fn new(scale: f32, rotate: f32, translate_x: f32, translate_y: f32) -> Self {
+impl SingleTransform {
+    fn new(
+        scale: f32,
+        rotate: f32,
+        translate_x: f32,
+        translate_y: f32,
+        flip_x: bool,
+        flip_y: bool,
+    ) -> Self {
         Self {
             scale,
             rotate,
             translate: Pos2::new(translate_x, translate_y),
+            flip_x,
+            flip_y,
         }
-    }
-    /// Chain two transforms into one transform (order is other then this one)
-    fn chain(&self, other: &Self) -> Self {
-        Transform::new(self.scale * other.scale, self.rotate + other.rotate, self.translate.x + other.translate.x, self.translate.y + other.translate.y)
     }
     fn apply(&self, a: &Pos2) -> Pos2 {
         let c = self.rotate.cos();
@@ -200,10 +216,54 @@ impl Transform {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Transform {
+    transforms: std::vec::Vec<SingleTransform>,
+}
+
+impl Transform {
+    fn new(
+        scale: f32,
+        rotate: f32,
+        translate_x: f32,
+        translate_y: f32,
+        flip_x: bool,
+        flip_y: bool,
+    ) -> Self {
+        Self {
+            transforms: vec![SingleTransform::new(scale, rotate, translate_x, translate_y, flip_x, flip_y)],
+        }
+    }
+    /// Chain two transforms into one transform (order is other then this one)
+    fn chain(&self, other: &Self) {
+        self.transforms.append(&mut self.transforms.clone());
+    }
+    fn apply(&self, a: &Pos2) -> Pos2 {
+        let mut p = a.clone();
+        for t in &self.transforms {
+            p = t.apply(&p);
+        }
+        return p;
+    }
+    fn apply_scalar(&self, a: f32) -> f32 {
+        let mut res = 1.0;
+        for t in &self.transforms {
+            res = t.apply_scalar(res);
+        }
+        return res;
+    }
+}
+
 /// Helper function for draw_to_shape
 // Turns one line of DRAW section into a (Shape, Shape)
 // Pair is base layer, then pad layer (on top)
-fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color: Color32, pad_size: f32) -> (Option<Shape>, Option<Shape>) {
+fn drawline_to_shape(
+    v: &Value,
+    transform: &Transform,
+    color: Color32,
+    pad_color: Color32,
+    pad_size: f32,
+) -> (Option<Shape>, Option<Shape>) {
     let a = v.as_array().unwrap();
     let tag = &a[0];
     let w_fine_orig = 2.0;
@@ -245,7 +305,10 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                     let c = transform.apply(&Pos2::new(x, y));
                     let r = transform.apply_scalar(r);
                     let w = transform.apply_scalar(w);
-                    return (Some(Shape::circle_stroke(c, r, Stroke::new(w, color))), None);
+                    return (
+                        Some(Shape::circle_stroke(c, r, Stroke::new(w, color))),
+                        None,
+                    );
                 }
             }
             "P" => {
@@ -265,7 +328,10 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 }
                 let filled = a[5 + 2 * n].as_str().unwrap() == "F" && w == w_fine;
                 if filled {
-                    return (Some(Shape::convex_polygon(v, color, Stroke::default())), None);
+                    return (
+                        Some(Shape::convex_polygon(v, color, Stroke::default())),
+                        None,
+                    );
                 } else {
                     let mut res = vec![];
                     // Add individual line segments connecting pairs.
@@ -329,7 +395,10 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
                 };
                 let c1 = transform.apply(&Pos2::new(x, y));
                 let c2 = transform.apply(&Pos2::new(x + l * vl.x, y + l * vl.y));
-                return (Some(Shape::line_segment([c1, c2], Stroke::new(w, color))), Some(Shape::circle_filled(c1, pad_size, pad_color)));
+                return (
+                    Some(Shape::line_segment([c1, c2], Stroke::new(w, color))),
+                    Some(Shape::circle_filled(c1, pad_size, pad_color)),
+                );
             }
             &_ => return (None, None),
         }
@@ -338,7 +407,13 @@ fn drawline_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color
 }
 
 /// Given DRAW JSON value, turn section into single Shape for drawing (including pads)
-fn draw_to_shape(v: &Value, transform: &Transform, color: Color32, pad_color: Color32, pad_size: f32) -> Shape {
+fn draw_to_shape(
+    v: &Value,
+    transform: &Transform,
+    color: Color32,
+    pad_color: Color32,
+    pad_size: f32,
+) -> Shape {
     let mut lower_shapes = vec![];
     let mut upper_shapes = vec![];
     let n = v.as_array().unwrap().len();
@@ -363,11 +438,24 @@ impl eframe::App for MyApp {
             let color = Color32::WHITE;
             let pad_color = Color32::YELLOW;
             let pad_size = 10.0;
-            let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0);
+            let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0, false, false);
             for component in &self.graphical_parts {
                 let draw_instr = &self.draw_lib[&component.component_type];
-                let transform = global_transform.chain(&Transform::new(1.0, 3.14159 * 0.5 * component.angle, component.position.x, component.position.y));
-                painter.add(draw_to_shape(&draw_instr, &transform, color, pad_color, pad_size));
+                let transform = global_transform.chain(&Transform::new(
+                    1.0,
+                    3.14159 * 0.5 * component.angle,
+                    component.position.x,
+                    component.position.y,
+                    false,
+                    false,
+                ));
+                painter.add(draw_to_shape(
+                    &draw_instr,
+                    &transform,
+                    color,
+                    pad_color,
+                    pad_size,
+                ));
             }
         });
     }
