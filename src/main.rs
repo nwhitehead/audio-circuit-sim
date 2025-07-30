@@ -58,14 +58,18 @@ struct GraphicalComponent {
     position: Pos2,
     // in 90 degree chunks
     angle: f32,
+    flip_x: bool,
+    flip_y: bool,
 }
 
 impl GraphicalComponent {
-    fn new(component_type: ComponentType, position: Pos2, angle: f32) -> Self {
+    fn new(component_type: ComponentType, position: Pos2, angle: f32, flip_x: bool, flip_y: bool) -> Self {
         Self {
             component_type,
             position,
             angle,
+            flip_x,
+            flip_y,
         }
     }
 }
@@ -117,10 +121,10 @@ impl Default for MyApp {
             );
         }
         let graphical_parts = vec![
-            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
-            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(500.0, 50.0), 1.0),
-            GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 900.0), 0.0),
-            GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 400.0), 0.0),
+            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0, false, false),
+            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(500.0, 50.0), 1.0, false, false),
+            GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 900.0), 0.0, false, false),
+            GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 400.0), 0.0, false, true),
         ];
 
         Self {
@@ -137,6 +141,7 @@ impl MyApp {
             "SaxMono".to_owned(),
             egui::FontData::from_static(include_bytes!("../fonts/saxmono.ttf"))
                 .tweak(egui::FontTweak {
+
                     scale: 1.0,
                     y_offset_factor: 0.0,
                     y_offset: 0.0,
@@ -177,6 +182,7 @@ fn parse_number(v: &Value) -> Option<f32> {
     }
 }
 
+/// Order is: flip, scale, rotate, translate
 #[derive(Clone, Debug)]
 struct SingleTransform {
     scale: f32,
@@ -204,11 +210,13 @@ impl SingleTransform {
         }
     }
     fn apply(&self, a: &Pos2) -> Pos2 {
+        let x = if self.flip_x { -a.x } else { a.x };
+        let y = if self.flip_y { -a.y } else { a.y };
         let c = self.rotate.cos();
         let s = self.rotate.sin();
         return Pos2::new(
-            (a.x * c - a.y * s) * self.scale + self.translate.x,
-            (a.x * s + a.y * c) * self.scale + self.translate.y,
+            (x * c - y * s) * self.scale + self.translate.x,
+            (x * s + y * c) * self.scale + self.translate.y,
         );
     }
     fn apply_scalar(&self, a: f32) -> f32 {
@@ -456,8 +464,8 @@ impl eframe::App for MyApp {
                     3.14159 * 0.5 * component.angle,
                     component.position.x,
                     component.position.y,
-                    false,
-                    false,
+                    component.flip_x,
+                    component.flip_y,
                 )
                 .chain(&global_transform);
                 painter.add(draw_to_shape(
