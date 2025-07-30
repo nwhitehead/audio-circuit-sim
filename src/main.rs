@@ -63,7 +63,13 @@ struct GraphicalComponent {
 }
 
 impl GraphicalComponent {
-    fn new(component_type: ComponentType, position: Pos2, angle: f32, flip_x: bool, flip_y: bool) -> Self {
+    fn new(
+        component_type: ComponentType,
+        position: Pos2,
+        angle: f32,
+        flip_x: bool,
+        flip_y: bool,
+    ) -> Self {
         Self {
             component_type,
             position,
@@ -100,6 +106,8 @@ fn main() -> Result<(), eframe::Error> {
 struct MyApp {
     draw_lib: ComponentDrawLibrary,
     graphical_parts: Vec<GraphicalComponent>,
+    // Edit state
+    part_selected: usize,
 }
 
 impl Default for MyApp {
@@ -121,15 +129,41 @@ impl Default for MyApp {
             );
         }
         let graphical_parts = vec![
-            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0, false, false),
-            GraphicalComponent::new(ComponentType::Resistor, Pos2::new(500.0, 50.0), 1.0, false, false),
-            GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 900.0), 0.0, false, false),
-            GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 400.0), 0.0, false, true),
+            GraphicalComponent::new(
+                ComponentType::Resistor,
+                Pos2::new(200.0, 200.0),
+                0.0,
+                false,
+                false,
+            ),
+            GraphicalComponent::new(
+                ComponentType::Resistor,
+                Pos2::new(500.0, 50.0),
+                1.0,
+                false,
+                false,
+            ),
+            GraphicalComponent::new(
+                ComponentType::TransistorNPN,
+                Pos2::new(500.0, 900.0),
+                0.0,
+                false,
+                false,
+            ),
+            GraphicalComponent::new(
+                ComponentType::TransistorPNP,
+                Pos2::new(500.0, 400.0),
+                0.0,
+                false,
+                true,
+            ),
         ];
+        let part_selected = 0;
 
         Self {
             draw_lib,
             graphical_parts,
+            part_selected,
         }
     }
 }
@@ -141,7 +175,6 @@ impl MyApp {
             "SaxMono".to_owned(),
             egui::FontData::from_static(include_bytes!("../fonts/saxmono.ttf"))
                 .tweak(egui::FontTweak {
-
                     scale: 1.0,
                     y_offset_factor: 0.0,
                     y_offset: 0.0,
@@ -450,13 +483,37 @@ fn draw_to_shape(
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::P)) {
+                self.part_selected = if self.part_selected > 0 {
+                    self.part_selected - 1
+                } else {
+                    0
+                };
+                println!(
+                    "- part_selected = {:?} / {:?}",
+                    self.part_selected,
+                    self.graphical_parts.len()
+                );
+            }
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::N)) {
+                self.part_selected = if self.part_selected < self.graphical_parts.len() - 1 {
+                    self.part_selected + 1
+                } else {
+                    self.graphical_parts.len() - 1
+                };
+                println!(
+                    "+ part_selected = {:?} / {:?}",
+                    self.part_selected,
+                    self.graphical_parts.len()
+                );
+            }
             ui.add(heading("Circuit"));
             let painter = ui.painter();
             let color = Color32::WHITE;
             let pad_color = Color32::YELLOW;
             let pad_size = 10.0;
             let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0, false, false);
-            for component in &self.graphical_parts {
+            for (index, component) in self.graphical_parts.iter().enumerate() {
                 let draw_instr = &self.draw_lib[&component.component_type];
                 // swap order of transforms
                 let transform = Transform::new(
@@ -468,6 +525,7 @@ impl eframe::App for MyApp {
                     component.flip_y,
                 )
                 .chain(&global_transform);
+                let color = if index == self.part_selected { Color32::RED } else { color };
                 painter.add(draw_to_shape(
                     &draw_instr,
                     &transform,
