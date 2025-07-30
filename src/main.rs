@@ -483,7 +483,16 @@ fn draw_to_shape(
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::P)) {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete)) {
+                if self.graphical_parts.len() > 0 {
+                    self.graphical_parts.remove(self.part_selected);
+                    if self.graphical_parts.len() > 0 && self.part_selected > self.graphical_parts.len() - 1 {
+                        self.part_selected = self.graphical_parts.len() - 1;
+                    }
+                }
+            }
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::P)) {
+                // Previous
                 self.part_selected = if self.part_selected > 0 {
                     self.part_selected - 1
                 } else {
@@ -495,12 +504,15 @@ impl eframe::App for MyApp {
                     self.graphical_parts.len()
                 );
             }
-            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL, egui::Key::N)) {
-                self.part_selected = if self.part_selected < self.graphical_parts.len() - 1 {
-                    self.part_selected + 1
-                } else {
-                    self.graphical_parts.len() - 1
-                };
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::N)) {
+                // Next
+                if self.graphical_parts.len() > 0 {
+                    self.part_selected = if self.part_selected < self.graphical_parts.len() - 1 {
+                        self.part_selected + 1
+                    } else {
+                        self.graphical_parts.len() - 1
+                    };
+                }
                 println!(
                     "+ part_selected = {:?} / {:?}",
                     self.part_selected,
