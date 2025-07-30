@@ -119,8 +119,8 @@ impl Default for MyApp {
         let graphical_parts = vec![
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(200.0, 200.0), 0.0),
             GraphicalComponent::new(ComponentType::Resistor, Pos2::new(500.0, 50.0), 1.0),
-            GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 500.0), 0.0),
-            GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 200.0), 0.0),
+            GraphicalComponent::new(ComponentType::TransistorNPN, Pos2::new(500.0, 900.0), 0.0),
+            GraphicalComponent::new(ComponentType::TransistorPNP, Pos2::new(500.0, 400.0), 0.0),
         ];
 
         Self {
@@ -231,12 +231,21 @@ impl Transform {
         flip_y: bool,
     ) -> Self {
         Self {
-            transforms: vec![SingleTransform::new(scale, rotate, translate_x, translate_y, flip_x, flip_y)],
+            transforms: vec![SingleTransform::new(
+                scale,
+                rotate,
+                translate_x,
+                translate_y,
+                flip_x,
+                flip_y,
+            )],
         }
     }
-    /// Chain two transforms into one transform (order is other then this one)
-    fn chain(&self, other: &Self) {
-        self.transforms.append(&mut self.transforms.clone());
+    /// Chain two transforms into one transform (order is this then other)
+    fn chain(&self, other: &Self) -> Self {
+        let mut transforms = self.transforms.clone();
+        transforms.append(&mut other.transforms.clone());
+        Self { transforms }
     }
     fn apply(&self, a: &Pos2) -> Pos2 {
         let mut p = a.clone();
@@ -246,7 +255,7 @@ impl Transform {
         return p;
     }
     fn apply_scalar(&self, a: f32) -> f32 {
-        let mut res = 1.0;
+        let mut res = a;
         for t in &self.transforms {
             res = t.apply_scalar(res);
         }
@@ -441,14 +450,16 @@ impl eframe::App for MyApp {
             let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0, false, false);
             for component in &self.graphical_parts {
                 let draw_instr = &self.draw_lib[&component.component_type];
-                let transform = global_transform.chain(&Transform::new(
+                // swap order of transforms
+                let transform = Transform::new(
                     1.0,
                     3.14159 * 0.5 * component.angle,
                     component.position.x,
                     component.position.y,
                     false,
                     false,
-                ));
+                )
+                .chain(&global_transform);
                 painter.add(draw_to_shape(
                     &draw_instr,
                     &transform,
