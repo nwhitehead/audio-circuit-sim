@@ -6,15 +6,16 @@ import numpy as np
 class ComponentType(Enum):
     PASSIVE = 1
     VOLTAGE_SOURCE = 2
-    NONLINEAR = 3
+    CURRENT_SOURCE = 3
+    NONLINEAR = 4
 
 @dataclass
 class Resistor:
-    v: float
+    r: float
     def component_type(self):
         return ComponentType.PASSIVE
     def conductance(self):
-        return 1 / self.v
+        return 1 / self.r
 
 @dataclass
 class VoltageSource:
@@ -22,22 +23,24 @@ class VoltageSource:
     def component_type(self):
         return ComponentType.VOLTAGE_SOURCE
 
+@dataclass
+class CurrentSource:
+    i: float
+    def component_type(self):
+        return ComponentType.CURRENT_SOURCE
+
 def count_num_voltages(netlist):
     n = 0
     for (component, pos, neg) in netlist:
         n = max(n, pos, neg)
     return n
 
-def count_num_sources(netlist):
+def count_num_voltage_sources(netlist):
     m = 0
     for (component, pos, neg) in netlist:
         if component.component_type() == ComponentType.VOLTAGE_SOURCE:
             m += 1
     return m
-
-def generate_mna(netlist):
-    nv = count_num_voltages(netlist)
-    g = np.zeros((nv, nv), dtype=float)
 
 def generate_mna(netlist):
     '''
@@ -46,7 +49,7 @@ def generate_mna(netlist):
     
     '''
     n = count_num_voltages(netlist)
-    m = count_num_sources(netlist)
+    m = count_num_voltage_sources(netlist)
     a = np.zeros((n + m, n + m), dtype=float)
     b = np.zeros(n + m, dtype=float)
     mi = 0
@@ -104,7 +107,7 @@ def main():
         (vextra, 3, 0),
     ]
     assert count_num_voltages(netlist) == 3
-    assert count_num_sources(netlist) == 2
+    assert count_num_voltage_sources(netlist) == 2
     a, b = generate_mna(netlist)
     assert same_matrix(a, np.array([[0.5, 0, 0, -1, 0], [0, 0.375, -0.25, 1, 0], [0, -0.25, 0.25, 0, 1], [-1, 1, 0, 0, 0], [0, 0, 1, 0, 0]]))
     assert same_matrix(b, np.array([0, 0, 0, 32, 20]))
