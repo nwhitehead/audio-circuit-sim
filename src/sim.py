@@ -81,6 +81,11 @@ def generate_mna(netlist):
             # Also record voltage in RHS
             b[n + mi] = component.v
             mi += 1
+        elif t == ComponentType.CURRENT_SOURCE:
+            if pos > 0:
+                b[pos - 1] += component.i
+            if neg > 0:
+                b[neg - 1] -= component.i
     return (a, b)
 
 def same_matrix(a, b):
@@ -95,6 +100,7 @@ def main():
     r3 = Resistor(8)
     vss = VoltageSource(32)
     vextra = VoltageSource(20)
+    iss = CurrentSource(0.25)
     assert r1.component_type() == ComponentType.PASSIVE
     assert r1.conductance() == 0.5
 
@@ -112,6 +118,8 @@ def main():
     a, b = generate_mna(netlist)
     assert same_matrix(a, np.array([[0.5, 0, 0, -1, 0], [0, 0.375, -0.25, 1, 0], [0, -0.25, 0.25, 0, 1], [-1, 1, 0, 0, 0], [0, 0, 1, 0, 0]]))
     assert same_matrix(b, np.array([0, 0, 0, 32, 20]))
+    x = np.linalg.solve(a, b)
+    print(x)
 
     # Case 2
     netlist = [
@@ -119,10 +127,13 @@ def main():
         (r2, 1, 2),
         (r3, 0, 2),
         (vss, 1, 2),
+        (iss, 1, 0),
     ]
     a, b = generate_mna(netlist)
+    print(a)
+    print(b)
     assert same_matrix(a, np.array([[0.75, -0.25, 1], [-0.25, 0.375, -1], [1, -1, 0]]))
-    assert same_matrix(b, np.array([0, 0, 32]))
+    assert same_matrix(b, np.array([0.25, 0, 32]))
 
 
 if __name__ == '__main__':
