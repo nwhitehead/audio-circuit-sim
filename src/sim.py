@@ -5,7 +5,7 @@ import numpy as np
 
 class ComponentType(Enum):
     PASSIVE = 1
-    SOURCE = 2
+    VOLTAGE_SOURCE = 2
     NONLINEAR = 3
 
 @dataclass
@@ -17,10 +17,10 @@ class Resistor:
         return 1 / self.v
 
 @dataclass
-class VoltageSupply:
+class VoltageSource:
     v: float
     def component_type(self):
-        return ComponentType.SOURCE
+        return ComponentType.VOLTAGE_SOURCE
 
 def count_num_voltages(netlist):
     n = 0
@@ -31,26 +31,54 @@ def count_num_voltages(netlist):
 def count_num_sources(netlist):
     m = 0
     for (component, pos, neg) in netlist:
-        if component.component_type() == ComponentType.SOURCE:
+        if component.component_type() == ComponentType.VOLTAGE_SOURCE:
             m += 1
     return m
 
-def generate_mna_g(netlist):
+def generate_mna(netlist):
     nv = count_num_voltages(netlist)
     g = np.zeros((nv, nv), dtype=float)
+
+def generate_mna(netlist):
+    '''
+    Given netlist, returns a matrix and b vector for a * x = b formulation
+    x will have structure of n voltages followed by m currents through sources.
+    
+    '''
+    n = count_num_voltages(netlist)
+    m = count_num_sources(netlist)
+    a = np.zeros((n + m, n + m), dtype=float)
+    b = np.zeros(n + m, dtype=float)
+    mi = 0
     for (component, pos, neg) in netlist:
-        if component.component_type() == ComponentType.PASSIVE:
+        t = component.component_type()
+        if t == ComponentType.PASSIVE:
+            # Passive components go into upperleft n x n part of a
             c = component.conductance()
             # On diagonal is sum of conductances
             if pos > 0:
-                g[pos - 1, pos - 1] += c
+                a[pos - 1, pos - 1] += c
             if neg > 0:
-                g[neg - 1, neg - 1] += c
-            # Off diagonal is negation, symmetric
+                a[neg - 1, neg - 1] += c
+            # Off diagonal is sum of negated conductances, symmetric
+            # Off diagonal is only relevant if no ground connection
             if pos > 0 and neg > 0:
-                g[pos - 1, neg - 1] -= c
-                g[neg - 1, pos -1 ] -= c
-    return g
+                a[pos - 1, neg - 1] -= c
+                a[neg - 1, pos -1 ] -= c
+        elif t == ComponentType.VOLTAGE_SOURCE:
+            # Voltage sources go into upper right and lower left sections
+            # Positive 1 for positive connection side, -1 for negative side
+            # Connections to ground don't have an entry
+            if pos > 0:
+                a[pos - 1, n + mi] = 1
+                a[n + mi, pos - 1] = 1
+            if neg > 0:
+                a[neg - 1, n + mi] = -1
+                a[n + mi, neg - 1] = -1
+            # Also record voltage in RHS
+            b[n + mi] = component.v
+            mi += 1
+    return (a, b)
 
 def same_matrix(a, b):
     return np.linalg.norm(a - b) < 1e-6
@@ -62,8 +90,8 @@ def main():
     r1 = Resistor(2)
     r2 = Resistor(4)
     r3 = Resistor(8)
-    vss = VoltageSupply(32)
-    vextra = VoltageSupply(20)
+    vss = VoltageSource(32)
+    vextra = VoltageSource(20)
     assert r1.component_type() == ComponentType.PASSIVE
     assert r1.conductance() == 0.5
     # Netlist is component, positive, negative connection
@@ -75,12 +103,12 @@ def main():
         (vss, 2, 1),
         (vextra, 3, 0),
     ]
-    nv = count_num_voltages(netlist)
-    assert nv == 3
-    ns = count_num_sources(netlist)
-    assert ns == 2
-    g = generate_mna_g(netlist)
-    assert same_matrix(g, np.array([[0.5, 0.0, 0.0], [0.0, 0.375, -0.25], [0.0, -0.25, 0.25]]))
+    assert count_num_voltages(netlist) == 3
+    assert count_num_sources(netlist) == 2
+    a, b = generate_mna(netlist)
+    assert same_matrix(a, np.array([[0.5, 0, 0, -1, 0], [0, 0.375, -0.25, 1, 0], [0, -0.25, 0.25, 0, 1], [-1, 1, 0, 0, 0], [0, 0, 1, 0, 0]]))
+    assert same_matrix(b, np.array([0, 0, 0, 32, 20]))
+
     # Case 2
     netlist = [
         (r1, 0, 1),
@@ -88,8 +116,10 @@ def main():
         (r3, 0, 2),
         (vss, 1, 2),
     ]
-    g = generate_mna_g(netlist)
-    assert same_matrix(g, np.array([[0.75, -0.25], [-0.25, 0.375]]))
+    a, b = generate_mna(netlist)
+    print(a)
+    print(b)
+    assert same_matrix(a, np.array([[0.75, -0.25, 1], [-0.25, 0.375, -1], [1, -1, 0]]))
 
 if __name__ == '__main__':
     main()

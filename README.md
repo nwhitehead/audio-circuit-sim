@@ -13,6 +13,14 @@ Working out data structures and file formats beyond that.
 Simulation follows general SPICE method, with some simplifications to limit
 scope to audio rate data.
 
+## Python
+
+Python part is to prototype setting up matrix solver.
+
+```sh
+python src/sim.py
+```
+
 ## Parts
 
 * C
