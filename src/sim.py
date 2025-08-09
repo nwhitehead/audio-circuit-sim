@@ -97,6 +97,7 @@ def main():
     vextra = VoltageSource(20)
     assert r1.component_type() == ComponentType.PASSIVE
     assert r1.conductance() == 0.5
+
     # Netlist is component, positive, negative connection
     # Connection 0 is always ground
     netlist = [
@@ -120,9 +121,9 @@ def main():
         (vss, 1, 2),
     ]
     a, b = generate_mna(netlist)
-    print(a)
-    print(b)
     assert same_matrix(a, np.array([[0.75, -0.25, 1], [-0.25, 0.375, -1], [1, -1, 0]]))
+    assert same_matrix(b, np.array([0, 0, 32]))
+
 
 if __name__ == '__main__':
     main()
