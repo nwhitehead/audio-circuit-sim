@@ -4,7 +4,7 @@ From:
 https://gist.github.com/signaldust/74ce12ae67bf21a8141f9b4a19ce8365
 
 By:
-Pihlaja (signaldust AKA mystrans on KVR)
+Pihlaja Voipio (mystran on KVR)
 pihlaja@signaldust.com
 */
 
