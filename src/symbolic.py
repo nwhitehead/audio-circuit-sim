@@ -60,7 +60,12 @@ class BinExpr:
     def __str__(self):
         return f'({self.left} {self.op} {self.right})'
 
-Expr = VarExpr | BinExpr
+@dataclass
+class ZeroExpr:
+    def __str__(self):
+        return '0'
+
+Expr = ZeroExpr | VarExpr | BinExpr
 
 def main():
     x = Variable()
