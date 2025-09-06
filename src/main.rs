@@ -1,3 +1,10 @@
+/*
+
+
+
+ */
+
+
 // hide console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 #![allow(rustdoc::missing_crate_level_docs)]
@@ -130,7 +137,7 @@ impl Default for MyApp {
         }
         let graphical_parts = vec![
             GraphicalComponent::new(
-                ComponentType::Resistor,
+                ComponentType::Capacitor,
                 Pos2::new(200.0, 200.0),
                 0.0,
                 false,
@@ -319,6 +326,8 @@ fn drawline_to_shape(
     let w_fine_orig = 2.0;
     let w_fine = transform.apply_scalar(w_fine_orig);
     let pad_size = transform.apply_scalar(pad_size);
+    // Smaller than 1/2 to make it visually look better.
+    let w_factor = 0.4;
     if tag.is_string() {
         let ts = tag.as_str().unwrap();
         match ts {
@@ -389,11 +398,6 @@ fn drawline_to_shape(
                     for i in 0..v.len() - 1 {
                         res.push(Shape::line_segment([v[i], v[i + 1]], Stroke::new(w, color)));
                     }
-                    // Add circles to connect lines.
-                    // Smaller than width / 2 to make it visually look better.
-                    for p in v {
-                        res.push(Shape::circle_filled(p, w * 0.48, color));
-                    }
                     return (Some(Shape::Vec(res)), None);
                 }
             }
@@ -422,9 +426,8 @@ fn drawline_to_shape(
                     res.push(Shape::line_segment([v[i], v[i + 1]], Stroke::new(w, color)));
                 }
                 // Add circles to connect lines.
-                // Smaller than width / 2 to make it visually look better.
                 for p in v {
-                    res.push(Shape::circle_filled(p, w * 0.48, color));
+                    res.push(Shape::circle_filled(p, w_factor * w, color));
                 }
                 return (Some(Shape::Vec(res)), None);
             }
@@ -524,7 +527,7 @@ impl eframe::App for MyApp {
             let color = Color32::WHITE;
             let pad_color = Color32::YELLOW;
             let pad_size = 10.0;
-            let global_transform = Transform::new(0.5, 0.0, 0.0, 0.0, false, false);
+            let global_transform = Transform::new(0.6, 0.0, 0.0, 0.0, false, false);
             for (index, component) in self.graphical_parts.iter().enumerate() {
                 let draw_instr = &self.draw_lib[&component.component_type];
                 // swap order of transforms
