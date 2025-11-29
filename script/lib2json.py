@@ -2,7 +2,7 @@
 
 Command line utility for parsing KiCAD lib files and outputting JSON format.
 
-Example ussage:
+Example usage:
 
     uv run script/lib2json.py ../kicad-symbols/Transistor_BJT.lib > BJT.json
 

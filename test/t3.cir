@@ -1,0 +1,42 @@
+inverter example circuit for control language tutorial
+* file inv-example.cir
+
+* the power supply 2.0 V
+Vcc cc 0 2
+
+* the input signal for dc and tran simulation
+Vin in 0 dc 0 pulse (0 2 95n 2n 2n 90n 180n)
+
+* the circuit
+Mn1 out in 0 0 nm W=2u L=0.18u
+Mp1 out in cc cc pm W=4u L=0.18u
+
+* model and model parameters (we use the built-in default parameters for BSIM4)
+.model nm nmos level=14 version=4.8.1
+.model pm pmos level=14 version=4.8.1
+
+.control
+
+set hcopydevtype=postscript
+set hcopypscolor=1
+
+set color0=white
+set color1=black
+set color2=red
+set color3=blue
+set color4=violet
+set color5=rgb:3/8/0
+set color6=rgb:4/0/0
+
+set hcopywidth=800
+set hcopyheight=600
+
+tran 100p 500n
+set xbrushwidth=2
+hardcopy out/t3.ps v(in) v(out)
+write out/t3.out v(in) v(out)
+quit
+
+.endc
+
+.end

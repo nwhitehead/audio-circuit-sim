@@ -13,11 +13,16 @@ Working out data structures and file formats beyond that.
 Simulation follows general SPICE method, with some simplifications to limit
 scope to audio rate data.
 
+Example command for converting KiCAD file to JSON:
+```bash
+uv run script/lib2json.py ../kicad-symbols/Transistor_BJT.lib > BJT.json
+```
+
 ## Python
 
-Python part is to prototype setting up matrix solver.
+Python part is to prototype setting up symbolic matrix solver.
 
-```sh
+```bash
 python src/sim.py
 ```
 
