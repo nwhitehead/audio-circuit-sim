@@ -15,3 +15,7 @@ py:
 ngspice:
   mkdir -p out/
   ngspice test/t3.cir
+
+# Test the tests
+test:
+  pytest src/parse.py

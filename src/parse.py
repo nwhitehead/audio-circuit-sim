@@ -45,7 +45,31 @@ def parse_lines(txt, metadata):
             result.append(s_line.split(' '))
     return result
 
-def parse_resistor(parts):
+def parse_value(value):
+    suffixes = {
+        'T': 1e12,
+        'G': 1e9,
+        'X': 1e6,
+        'K': 1e3,
+        'M': 1e-3,
+        'U': 1e-6,
+        'N': 1e-9,
+        'P': 1e-12,
+        'F': 1e-15,
+    }
+    for suffix in suffixes:
+        if value.endswith(suffix) or value.endswith(suffix.upper()):
+            left = value[:-1]
+            return float(left) * suffixes[suffix]
+    return float(value)
+
+def test_parse_value():
+    assert parse_value('12') == 12
+    assert parse_value('1.2') == 1.2
+    assert parse_value('1.2K') == 1200
+    assert parse_value('1.2F') == 1.2e-15
+
+def parse_component(parts):
     pass
 
 def parse_type(line):

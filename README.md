@@ -18,6 +18,21 @@ Example command for converting KiCAD file to JSON:
 uv run script/lib2json.py ../kicad-symbols/Transistor_BJT.lib > BJT.json
 ```
 
+## RCR File Format
+
+The `.rcr` file format is a Rust Circuit simulatoR, a simplified SPICE format.
+Lines starting with `#` are comments. Leading and trailing whitespace is
+ignored. File can be ended early with `.end`. Otherwise there are component
+lines:
+* `Rname pos neg value` resistor
+* `Cname pos neg value` capacitor
+* `Vname pos neg value` voltage source
+* `Iname pos neg value` current source
+
+Nodes are named with anything including numbers. Values are numerical with
+optional suffixes from `TGXKMUNPF`, any case. Meaning is tera, giga, mega, kilo,
+milli, micro, nano, pico, femto.
+
 ## Python
 
 Python part is to prototype setting up symbolic matrix solver.
