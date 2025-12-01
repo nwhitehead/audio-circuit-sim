@@ -11,21 +11,25 @@ class ComponentType(Enum):
 
 @dataclass
 class Resistor:
-    r: float
+    n_pos: str
+    n_neg: str
+    value: float
     def component_type(self):
         return ComponentType.RESISTOR
-    def conductance(self):
-        return 1 / self.r
 
 @dataclass
 class VoltageSource:
-    v: float
+    n_pos: str
+    n_neg: str
+    value: float
     def component_type(self):
         return ComponentType.VOLTAGE_SOURCE
 
 @dataclass
 class CurrentSource:
-    i: float
+    n_pos: str
+    n_neg: str
+    value: float
     def component_type(self):
         return ComponentType.CURRENT_SOURCE
 
@@ -47,15 +51,15 @@ def parse_lines(txt, metadata):
 
 def parse_value(value):
     suffixes = {
-        'T': 1e12,
-        'G': 1e9,
-        'X': 1e6,
-        'K': 1e3,
-        'M': 1e-3,
-        'U': 1e-6,
-        'N': 1e-9,
-        'P': 1e-12,
-        'F': 1e-15,
+        't': 1e12,
+        'g': 1e9,
+        'x': 1e6,
+        'k': 1e3,
+        'm': 1e-3,
+        'u': 1e-6,
+        'n': 1e-9,
+        'p': 1e-12,
+        'f': 1e-15,
     }
     for suffix in suffixes:
         if value.endswith(suffix) or value.endswith(suffix.upper()):
@@ -69,24 +73,29 @@ def test_parse_value():
     assert parse_value('1.2K') == 1200
     assert parse_value('1.2F') == 1.2e-15
 
-def parse_component(parts):
-    pass
-
-def parse_type(line):
-    if line.startswith('R'):
+def parse_type(part):
+    if part.startswith('R'):
         return ComponentType.RESISTOR
-    if line.startswith('V'):
+    if part.startswith('V'):
         return ComponentType.VOLTAGE_SOURCE
-    if line.startswith('I'):
+    if part.startswith('I'):
         return ComponentType.CURRENT_SOURCE
     raise Exception('Unknown component type')
+
+def parse_component(t, parts):
+    if t == ComponentType.RESISTOR:
+        return Resistor(n_pos=parts[0], n_neg=parts[1], value=parse_value(parts[2]))
+
 
 def parse_top(txt, metadata):
     data = parse_lines(txt, metadata)
     nodes = []
     components = []
-    for c in data:
-        pass
+    for parts in data:
+        t = parse_type(parts[0])
+        print(t)
+        component = parse_component(t, parts[1:])
+    return data
 
 def main():
     parser = argparse.ArgumentParser(description='This utility is an RCR file parser')
