@@ -59,3 +59,25 @@ python src/sim.py
 * R_US
 * R_Potentiometer_US
 * Voltmeter_DC
+
+## Modified Nodal Analysis
+
+Basics:
+https://lpsa.swarthmore.edu/Systems/Electrical/mna/MNA2.html
+
+Idea is to use Kirchoff's Current Law at every point in circuit. Make a matrix.
+Each component has N pins and M extra state variables. The pins each have a
+voltage, the basic matrix is `Mx=b`. The `x` part is mostly voltages,
+multiplying by `M` should give currents on right side. Generally `b` part will
+be 0 but there might be some current sources that make it not 0.
+
+For the extra state variables, those get tacked onto the matrix, variables, and
+right hand side. For voltage sources the extra variable is actual current. So we
+solve for current in that part (`x` will hold current), voltage will be
+constant. RHS `b` for that state variable will be constant voltage.
+
+Each component has to "stamp" what it does onto the matrices. For resistors, the
+idea is to stamp conductance `1/R` positive and negative in right places based
+on connections.
+
+In `M` matrix, row `i` is related to currents summing at point `i`.
