@@ -101,7 +101,50 @@ struct MNANodeInfo
     name: String,
 }
 
+impl Default for MNANodeInfo {
+    fn default() -> Self {
+        MNANodeInfo {
+            info_type: InfoType::VOLTAGE,
+            scale: 1.0,
+            name: String::new(),
+        }
+    }
+}
+
+// Store matrix as a vector of rows for easy pivots
+type MNAVector<'a> = Vec<MNACell<'a>>;
+type MNAMatrix<'a> = Vec<MNAVector<'a>>;
+
+// Stores A and b for A*x - b = 0, where x is the solution.
+//
+// A is stored as a vector of rows, for easy in-place pivots
+//
+struct MNASystem<'a>
+{
+    nodes: Vec<MNANodeInfo>,
+    a: MNAMatrix<'a>,
+    b: MNAVector<'a>,
+    time: f64,
+}
+
+impl Default for MNASystem<'_> {
+    fn default() -> Self {
+        MNASystem {
+            nodes: vec![],
+            a: MNAMatrix::default(),
+            b: MNAVector::default(),
+            time: 0.0,
+        }
+    }
+}
+
+
+impl <'a> MNASystem<'a> {
+
+}
 
 fn main() {
+    let system = MNASystem::default();
+
     println!("Hello from sim.rs");
 }
