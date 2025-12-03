@@ -85,17 +85,16 @@ impl<'a> MNACell<'a> {
 }
 
 #[derive(Debug)]
-enum InfoType
-{
-    VOLTAGE, CURRENT, COUNT
+enum InfoType {
+    VOLTAGE,
+    CURRENT,
+    COUNT,
 }
 
 // this is for keeping track of node information
 // for the purposes of more intelligent plotting
 #[derive(Debug)]
-struct MNANodeInfo
-{
-
+struct MNANodeInfo {
     // one auto-range per unit-type
     info_type: InfoType,
     // scale factor (eg. charge to voltage)
@@ -123,8 +122,7 @@ type MNAMatrix<'a> = Vec<MNAVector<'a>>;
 // A is stored as a vector of rows, for easy in-place pivots
 //
 #[derive(Debug)]
-struct MNASystem<'a>
-{
+struct MNASystem<'a> {
     nodes: Vec<MNANodeInfo>,
     a_matrix: MNAMatrix<'a>,
     b: MNAVector<'a>,
@@ -142,8 +140,7 @@ impl Default for MNASystem<'_> {
     }
 }
 
-
-impl <'a> MNASystem<'a> {
+impl<'a> MNASystem<'a> {
     fn set_size(self: &mut Self, n: usize) {
         self.a_matrix.resize_with(n, Default::default);
         self.b.resize_with(n, Default::default);
