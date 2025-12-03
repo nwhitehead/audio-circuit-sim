@@ -1,4 +1,3 @@
-
 /// Show pivot details in LU factorization
 const VERBOSE_LU: bool = true;
 
@@ -50,21 +49,58 @@ struct MNACell<'a> {
 }
 
 impl Default for MNACell<'_> {
-    fn default() -> Self { MNACell {
-        g: 0.0,
-        g_timed: 0.0,
-        g_dyn: vec![],
-        lu: 0.0,
-        pre_lu: 0.0,
-        txt: String::new(),
-    } }
-}
-
-impl <'a> MNACell<'a> {
-    fn clear() {
-
+    fn default() -> Self {
+        MNACell {
+            g: 0.0,
+            g_timed: 0.0,
+            g_dyn: vec![],
+            lu: 0.0,
+            pre_lu: 0.0,
+            txt: String::new(),
+        }
     }
 }
+
+impl<'a> MNACell<'a> {
+    /// Clear cell
+    fn clear(self: &mut Self) {
+        self.g = 0.0;
+        self.g_timed = 0.0;
+        self.txt = String::new();
+    }
+
+    /// Setup pre_lu cache
+    fn init_lu(self: &mut Self, step_scale: f64) {
+        self.pre_lu = self.g + self.g_timed * step_scale;
+    }
+
+    /// Restore matrix state and update dynamic values
+    fn update_pre(self: &mut Self) {
+        self.lu = self.pre_lu;
+        for d in self.g_dyn.iter() {
+            self.lu += *d;
+        }
+    }
+}
+
+enum InfoType
+{
+    VOLTAGE, CURRENT, COUNT
+}
+
+// this is for keeping track of node information
+// for the purposes of more intelligent plotting
+struct MNANodeInfo
+{
+
+    // one auto-range per unit-type
+    info_type: InfoType,
+    // scale factor (eg. charge to voltage)
+    scale: f64,
+    // node name for display
+    name: String,
+}
+
 
 fn main() {
     println!("Hello from sim.rs");

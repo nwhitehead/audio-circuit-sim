@@ -2,8 +2,7 @@
 
 
 
- */
-
+*/
 
 // hide console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
@@ -489,7 +488,9 @@ impl eframe::App for MyApp {
             if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete)) {
                 if self.graphical_parts.len() > 0 {
                     self.graphical_parts.remove(self.part_selected);
-                    if self.graphical_parts.len() > 0 && self.part_selected > self.graphical_parts.len() - 1 {
+                    if self.graphical_parts.len() > 0
+                        && self.part_selected > self.graphical_parts.len() - 1
+                    {
                         self.part_selected = self.graphical_parts.len() - 1;
                     }
                 }
@@ -540,7 +541,11 @@ impl eframe::App for MyApp {
                     component.flip_y,
                 )
                 .chain(&global_transform);
-                let color = if index == self.part_selected { Color32::RED } else { color };
+                let color = if index == self.part_selected {
+                    Color32::RED
+                } else {
+                    color
+                };
                 painter.add(draw_to_shape(
                     &draw_instr,
                     &transform,
