@@ -122,7 +122,7 @@ type MNAMatrix<'a> = Vec<MNAVector<'a>>;
 struct MNASystem<'a>
 {
     nodes: Vec<MNANodeInfo>,
-    a: MNAMatrix<'a>,
+    a_matrix: MNAMatrix<'a>,
     b: MNAVector<'a>,
     time: f64,
 }
@@ -131,7 +131,7 @@ impl Default for MNASystem<'_> {
     fn default() -> Self {
         MNASystem {
             nodes: vec![],
-            a: MNAMatrix::default(),
+            a_matrix: MNAMatrix::default(),
             b: MNAVector::default(),
             time: 0.0,
         }
@@ -140,11 +140,19 @@ impl Default for MNASystem<'_> {
 
 
 impl <'a> MNASystem<'a> {
-
+    fn set_size(self: &mut Self, n: usize) {
+        self.a_matrix.resize_with(n, Default::default);
+        self.b.resize_with(n, Default::default);
+        self.nodes.resize_with(n, Default::default);
+        for i in 0..n {
+            self.b[i].clear();
+            self.a_matrix[i].resize_with(n, Default::default);
+        }
+    }
 }
 
 fn main() {
-    let system = MNASystem::default();
-
+    let mut system = MNASystem::default();
+    system.set_size(8);
     println!("Hello from sim.rs");
 }
