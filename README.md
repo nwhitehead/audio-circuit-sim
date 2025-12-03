@@ -81,3 +81,17 @@ idea is to stamp conductance `1/R` positive and negative in right places based
 on connections.
 
 In `M` matrix, row `i` is related to currents summing at point `i`.
+
+## Symbolic stuff
+
+Want to generate code that does simulation of each circuit. Can precompute
+symbolic expressions for the circuit, compile into a separate module for
+efficiency. Or 'interpret' the symbolic parsed structure to simulate without
+needing a compile step.
+
+I like the idea of explicit equations, not necessarily in matrix numerical form.
+
+OK, after thinking more about symbolic stuff I don't like doing everything with
+explicit ops and then trying to organize it into a matrix. Lots of work that is
+being undone, simplifying is hard problem.
+
