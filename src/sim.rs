@@ -63,13 +63,6 @@ impl Default for MNACell<'_> {
 }
 
 impl<'a> MNACell<'a> {
-    /// Clear cell
-    fn clear(self: &mut Self) {
-        self.g = 0.0;
-        self.g_timed = 0.0;
-        self.txt = String::new();
-    }
-
     /// Setup pre_lu cache
     fn init_lu(self: &mut Self, step_scale: f64) {
         self.pre_lu = self.g + self.g_timed * step_scale;
@@ -103,16 +96,15 @@ struct MNANodeInfo {
     name: String,
 }
 
-impl Default for MNANodeInfo {
-    fn default() -> Self {
-        MNANodeInfo {
+impl MNANodeInfo {
+    fn new_voltage(n: usize) -> Self {
+        Self {
             info_type: InfoType::VOLTAGE,
             scale: 1.0,
-            name: String::new(),
+            name: format!("v{}", n),
         }
     }
 }
-
 // Store matrix as a vector of rows for easy pivots
 type MNAVector<'a> = Vec<MNACell<'a>>;
 type MNAMatrix<'a> = Vec<MNAVector<'a>>;
@@ -144,19 +136,20 @@ impl<'a> MNASystem<'a> {
     fn set_size(self: &mut Self, n: usize) {
         self.a_matrix.resize_with(n, Default::default);
         self.b.resize_with(n, Default::default);
-        self.nodes.resize_with(n, Default::default);
         for i in 0..n {
-            self.b[i].clear();
             self.a_matrix[i].resize_with(n, Default::default);
-            self.nodes[i] = MNANodeInfo {
-                info_type: InfoType::VOLTAGE,
-                scale: 1.0,
-                name: format!("v{}", i),
-            };
-            for j in 0..n {
-                self.a_matrix[i][j].clear();
-            }
+            self.nodes.push(MNANodeInfo::new_voltage(i));
         }
+    }
+
+    fn stamp_static(self: &mut Self, value: f64, r: usize, c: usize, txt: &str) {
+        self.a_matrix[r][c].g += value;
+        self.a_matrix[r][c].txt += txt;
+    }
+
+    fn stamp_timed(self: &mut Self, value: f64, r: usize, c: usize, txt: &str) {
+        self.a_matrix[r][c].g_timed += value;
+        self.a_matrix[r][c].txt += txt;
     }
 }
 
