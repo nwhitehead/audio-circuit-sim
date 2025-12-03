@@ -153,6 +153,46 @@ impl<'a> MNASystem<'a> {
     }
 }
 
+trait Component {
+    // return the number of pins for this component
+    fn pin_count(&self) -> usize;
+
+    // return vector of pin locations
+    fn get_pin_locs(&self) -> Vec<usize>;
+
+    // setup pins and calculate the size of the full netlist
+    // the Component<> will handle this automatically
+    //
+    //  - netSize is the current size of the netlist
+    //  - pins is a vector of circuits nodes
+    //
+    fn setup_nets(&self, net_size: &mut usize, states: &mut usize, pins: Vec<usize>);
+
+    // this is for allocating state variables
+    fn setup_states(states: &mut usize) {}
+
+    // stamp constants into the matrix
+    fn stamp(system: &mut MNASystem);
+
+    // update state variables, only tagged nodes
+    // this is intended for fixed-time compatible
+    // testing to make sure we can code-gen stuff
+    fn update(m: &mut MNASystem) {}
+
+    // return true if we're done - will keep iterating
+    // until all the components are happy
+    fn newton(m: &mut MNASystem) -> bool {
+        true
+    }
+
+    // time-step change, for caps to fix their state-variables
+    fn scale_time(t_old_per_new: f64) {}
+}
+
+struct BaseComponent <const nPins: usize> {
+    pin_loc: Vec<usize>,
+}
+
 fn main() {
     let mut system = MNASystem::default();
     system.set_size(3);
