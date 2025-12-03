@@ -34,6 +34,7 @@ const MAX_ITER: u32 = 200;
 //
 // Lifetime is needed to make sure dynamic references are live when used.
 //
+#[derive(Debug)]
 struct MNACell<'a> {
     // simple values (eg. resistor conductance)
     g: f64,
@@ -83,6 +84,7 @@ impl<'a> MNACell<'a> {
     }
 }
 
+#[derive(Debug)]
 enum InfoType
 {
     VOLTAGE, CURRENT, COUNT
@@ -90,6 +92,7 @@ enum InfoType
 
 // this is for keeping track of node information
 // for the purposes of more intelligent plotting
+#[derive(Debug)]
 struct MNANodeInfo
 {
 
@@ -119,6 +122,7 @@ type MNAMatrix<'a> = Vec<MNAVector<'a>>;
 //
 // A is stored as a vector of rows, for easy in-place pivots
 //
+#[derive(Debug)]
 struct MNASystem<'a>
 {
     nodes: Vec<MNANodeInfo>,
@@ -147,12 +151,21 @@ impl <'a> MNASystem<'a> {
         for i in 0..n {
             self.b[i].clear();
             self.a_matrix[i].resize_with(n, Default::default);
+            self.nodes[i] = MNANodeInfo {
+                info_type: InfoType::VOLTAGE,
+                scale: 1.0,
+                name: format!("v{}", i),
+            };
+            for j in 0..n {
+                self.a_matrix[i][j].clear();
+            }
         }
     }
 }
 
 fn main() {
     let mut system = MNASystem::default();
-    system.set_size(8);
+    system.set_size(3);
     println!("Hello from sim.rs");
+    println!("{:?}", system);
 }
