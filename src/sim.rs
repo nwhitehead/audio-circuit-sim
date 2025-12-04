@@ -204,24 +204,53 @@ fn format_unit_value(v: f64, unit: &str) -> String {
 
 #[derive(Debug)]
 struct Resistor {
-    v: f64,
+    r: f64,
     l0: usize,
     l1: usize,
 }
 
 impl Resistor {
-    fn new(m: &mut MNASystem, v: f64, l0: usize, l1: usize) -> Self {
-        let g = 1.0 / v;
-        let txt = format!("R{}", format_unit_value(v, ""));
+    fn new(m: &mut MNASystem, r: f64, l0: usize, l1: usize) -> Self {
+        let g = 1.0 / r;
+        let txt = format!("R{}", format_unit_value(r, ""));
         m.stamp_static(g, l0, l0, &format!("+{}", txt));
         m.stamp_static(-g, l0, l1, &format!("-{}", txt));
         m.stamp_static(-g, l1, l0, &format!("-{}", txt));
         m.stamp_static(g, l1, l1, &format!("+{}", txt));
-        Self { v, l0, l1 }
+        Self { r, l0, l1 }
     }
 }
 
 impl Component for Resistor {}
+
+#[derive(Debug)]
+struct Capacitor {
+    c: f64,
+    l0: usize,
+    l1: usize,
+    l2: usize,
+    state_var: f64,
+    voltage: f64,
+}
+
+impl Capacitor {
+    fn new(m: &mut MNASystem, c: f64, l0: usize, l1: usize) -> Self {
+        let l2 = m.reserve();
+        let txt = format!("{}", format_unit_value(c, "F"));
+        let g = 2.0 * c;
+        m.stamp_timed(1., l0, l2, "+t");
+        m.stamp_timed(1., l1, l2, "-t");
+
+        // m.stamp_static(g, l0, l0, &"+t");
+        // m.stamp_static(-g, l0, l1, &format!("-{}", txt));
+        // m.stamp_static(-g, l1, l0, &format!("-{}", txt));
+        // m.stamp_static(g, l1, l1, &format!("+{}", txt));
+        Self { c, l0, l1, l2, state_var: 0., voltage: 0. }
+    }
+}
+
+impl Component for Capacitor {}
+
 
 #[cfg(test)]
 mod tests {
