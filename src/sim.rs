@@ -155,6 +155,7 @@ impl<'a> MNASystem<'a> {
         self.a_matrix[r][c].txt += txt;
     }
 
+    /// Reserve a fresh variable for a comonent's internal state tracking
     fn reserve(&mut self) -> usize {
         let sz = self.net_size;
         self.net_size += 1;
@@ -163,9 +164,6 @@ impl<'a> MNASystem<'a> {
 }
 
 trait Component {
-    // stamp constants into the matrix
-    fn stamp(&self, m: &mut MNASystem) {}
-
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
     // testing to make sure we can code-gen stuff
@@ -179,31 +177,6 @@ trait Component {
 
     // time-step change, fix their state-variables (used for caps)
     fn scale_time(&mut self, t_old_per_new: f64) {}
-}
-
-#[derive(Debug)]
-struct BaseComponentNet {
-    nets: Vec<usize>,
-}
-
-impl BaseComponentNet {
-    // Map component pin locations to net, together with internal state variables
-    // Internal state variables increase global net_size
-    //
-    //  - net_size is the current size of the netlist
-    //  - pins is a vector of circuits nodes
-    //  - num_state is number of internal state variables needed
-    //
-    fn setup(system: &mut MNASystem, pins: Vec<usize>, num_state: usize) -> Self {
-        let mut nets = vec![];
-        for pin in pins {
-            nets.push(pin);
-        }
-        for i in 0..num_state {
-            nets.push(system.reserve());
-        }
-        return Self { nets };
-    }
 }
 
 const UNIT_VALUE_OFFSET: i32 = 4;
@@ -227,18 +200,24 @@ fn format_unit_value(v: f64, unit: &str) -> String {
     return format!("{:.}{}{}", vr, UNIT_VALUE_SUFFIXES[suff as usize], unit);
 }
 
+// Components stamp themselves onto MNASystem as they are created.
+
 #[derive(Debug)]
 struct Resistor {
-    bcn: BaseComponentNet,
     v: f64,
+    l0: usize,
+    l1: usize,
 }
 
 impl Resistor {
-    fn new(system: &mut MNASystem, v: f64, l0: usize, l1: usize) -> Self {
-        Self {
-            bcn: BaseComponentNet::setup(system, vec![l0, l1], 0),
-            v,
-        }
+    fn new(m: &mut MNASystem, v: f64, l0: usize, l1: usize) -> Self {
+        let g = 1.0 / v;
+        let txt = format!("R{}", format_unit_value(v, ""));
+        m.stamp_static(g, l0, l0, &format!("+{}", txt));
+        m.stamp_static(-g, l0, l1, &format!("-{}", txt));
+        m.stamp_static(-g, l1, l0, &format!("-{}", txt));
+        m.stamp_static(g, l1, l1, &format!("+{}", txt));
+        Self { v, l0, l1 }
     }
 }
 
@@ -286,9 +265,9 @@ mod tests {
 
 fn main() {
     let mut system = MNASystem::default();
-    system.set_size(3);
+    system.set_size(2);
     let c1 = Resistor::new(&mut system, 100.0, 0, 1);
     println!("Hello from sim.rs");
     println!("{:?}", system);
-    println!("Resistor is {}", format_unit_value(1500.0, "Ohms"));
+    println!("Resistor is {}", format_unit_value(1500.0, " Ohms"));
 }
