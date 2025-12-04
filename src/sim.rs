@@ -154,61 +154,59 @@ impl<'a> MNASystem<'a> {
 }
 
 trait Component {
-    // return the number of pins for this component
-    fn pin_count(&self) -> usize;
-
-    // return vector of pin locations
-    fn get_pin_locs(&self) -> Vec<usize>;
-
-    // setup pins and calculate the size of the full netlist
-    // the Component<> will handle this automatically
-    //
-    //  - netSize is the current size of the netlist
-    //  - pins is a vector of circuits nodes
-    //
-    fn setup_nets(&mut self, net_size: &mut usize, states: usize, pins: Vec<usize>);
-
-    // this is for allocating state variables
-    fn setup_states(&mut self, states: usize);
-
     // stamp constants into the matrix
-    fn stamp(&self, system: &mut MNASystem);
+    fn stamp(&self, m: &mut MNASystem);
 
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
     // testing to make sure we can code-gen stuff
-    fn update(m: &mut MNASystem) {}
+    fn update(&self, m: &mut MNASystem);
 
     // return true if we're done - will keep iterating
     // until all the components are happy
-    fn newton(m: &mut MNASystem) -> bool {
-        true
-    }
+    fn newton(&self, m: &mut MNASystem) -> bool;
 
-    // time-step change, for caps to fix their state-variables
-    fn scale_time(t_old_per_new: f64) {}
+    // time-step change, fix their state-variables (used for caps)
+    fn scale_time(&mut self, t_old_per_new: f64);
 }
 
 struct BaseComponent {
-    pin_loc: Vec<usize>,
     nets: Vec<usize>,
 }
 
-impl Component for BaseComponent {
-    fn pin_count(&self) -> usize {
-        self.pin_loc.len()
-    }
-    fn get_pin_locs(&self) -> Vec<usize> {
-        self.pin_loc.clone()
-    }
-    fn setup_nets(&mut self, net_size: &mut usize, states: usize, pins: Vec<usize>) {
-        for i in 0..self.pin_loc.len() {
-            self.nets[i] = self.pin_loc[i];
+impl BaseComponent {
+    // setup pins and calculate the size of the full netlist
+    // the Component will handle this automatically
+    //
+    //  - netSize is the current size of the netlist
+    //  - pins is a vector of circuits nodes
+    //
+    fn setup(net_size: &mut usize, pins: Vec<usize>, num_state: usize) -> Self {
+        let mut nets = vec![];
+        for pin in pins {
+            nets.push(pin);
         }
+        for i in 0..num_state {
+            let sz = *net_size;
+            nets.push(sz);
+            *net_size += 1;
+        }
+        return Self { nets };
     }
-    fn setup_states(&mut self, states: usize) {}
+}
+
+impl Component for BaseComponent {
+    // Generic functions to satisfy interface
 
     fn stamp(&self, system: &mut MNASystem) {}
+
+    fn update(&self, m: &mut MNASystem) {}
+
+    fn newton(&self, m: &mut MNASystem) -> bool {
+        true
+    }
+
+    fn scale_time(&mut self, t_old_per_new: f64) {}
 }
 
 fn main() {
