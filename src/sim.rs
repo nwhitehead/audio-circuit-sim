@@ -230,6 +230,35 @@ fn format_unit_value(v: f64, unit: &str) -> String {
     return format!("{:.}{}{}", vr, unitValueSuffixes[suff as usize], unit);
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_unit_value() -> Result<(), String> {
+        assert_eq!(format_unit_value(1.5, " Ohms"), "1.5 Ohms");
+        assert_eq!(format_unit_value(15.0, " Ohms"), "15 Ohms");
+        assert_eq!(format_unit_value(1500.0, " Ohms"), "1.5k Ohms");
+        assert_eq!(format_unit_value(150000.0, " Ohms"), "150k Ohms");
+        assert_eq!(format_unit_value(1500000.0, " Ohms"), "1.5M Ohms");
+        assert_eq!(format_unit_value(0.015, " Ohms"), "15m Ohms");
+        assert_eq!(format_unit_value(0.0015, " Ohms"), "1.5m Ohms");
+        assert_eq!(format_unit_value(0.00015, " Ohms"), "150u Ohms");
+        Ok(())
+    }
+
+    #[test]
+    fn test_system() -> Result<(), String> {
+        let mut s = MNASystem::default();
+        s.set_size(5);
+        assert_eq!(s.a_matrix.len(), 5);
+        for row in s.a_matrix {
+            assert_eq!(row.len(), 5);
+        }
+        Ok(())
+    }
+}
+
 fn main() {
     let mut system = MNASystem::default();
     system.set_size(3);
