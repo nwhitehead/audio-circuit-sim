@@ -155,19 +155,21 @@ impl<'a> MNASystem<'a> {
 
 trait Component {
     // stamp constants into the matrix
-    fn stamp(&self, m: &mut MNASystem);
+    fn stamp(&self, m: &mut MNASystem) {}
 
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
     // testing to make sure we can code-gen stuff
-    fn update(&self, m: &mut MNASystem);
+    fn update(&self, m: &mut MNASystem) {}
 
     // return true if we're done - will keep iterating
     // until all the components are happy
-    fn newton(&self, m: &mut MNASystem) -> bool;
+    fn newton(&self, m: &mut MNASystem) -> bool {
+        true
+    }
 
     // time-step change, fix their state-variables (used for caps)
-    fn scale_time(&mut self, t_old_per_new: f64);
+    fn scale_time(&mut self, t_old_per_new: f64) {}
 }
 
 struct BaseComponent {
@@ -195,19 +197,7 @@ impl BaseComponent {
     }
 }
 
-impl Component for BaseComponent {
-    // Generic functions to satisfy interface
-
-    fn stamp(&self, system: &mut MNASystem) {}
-
-    fn update(&self, m: &mut MNASystem) {}
-
-    fn newton(&self, m: &mut MNASystem) -> bool {
-        true
-    }
-
-    fn scale_time(&mut self, t_old_per_new: f64) {}
-}
+impl Component for BaseComponent {}
 
 const unitValueOffset: i32 = 4;
 const unitValueMax: i32 = 8;
@@ -255,6 +245,16 @@ mod tests {
         for row in s.a_matrix {
             assert_eq!(row.len(), 5);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_component_polymorphism() -> Result<(), String> {
+        let mut s = MNASystem::default();
+        let mut net_size = 0;
+        let c1 = BaseComponent::setup(&mut net_size, vec![0, 1], 2);
+        let c2 = BaseComponent::setup(&mut net_size, vec![1, 2], 1);
+        let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2)];
         Ok(())
     }
 }
