@@ -35,13 +35,13 @@ const MAX_ITER: u32 = 200;
 // Lifetime is needed to make sure dynamic references are live when used.
 //
 #[derive(Debug)]
-struct MNACell<'a> {
+struct MNACell {
     // simple values (eg. resistor conductance)
     g: f64,
     // time-scaled values (eg. capacitor conductance)
     g_timed: f64,
-    // references to dynamic variables
-    g_dyn: Vec<&'a f64>,
+    // references to dynamic variables (by index into vector)
+    g_dyn: Vec<usize>,
     // LU value and pre-LU cache value
     lu: f64,
     pre_lu: f64,
@@ -49,7 +49,7 @@ struct MNACell<'a> {
     txt: String,
 }
 
-impl Default for MNACell<'_> {
+impl Default for MNACell {
     fn default() -> Self {
         MNACell {
             g: 0.0,
@@ -62,17 +62,17 @@ impl Default for MNACell<'_> {
     }
 }
 
-impl<'a> MNACell<'a> {
+impl MNACell {
     /// Setup pre_lu cache
     fn init_lu(&mut self, step_scale: f64) {
         self.pre_lu = self.g + self.g_timed * step_scale;
     }
 
     /// Restore matrix state and update dynamic values
-    fn update_pre(&mut self) {
+    fn update_pre(&mut self, vars: &Vec<f64>) {
         self.lu = self.pre_lu;
-        for d in self.g_dyn.iter() {
-            self.lu += *d;
+        for index in self.g_dyn.iter() {
+            self.lu += vars[*index];
         }
     }
 }
@@ -106,23 +106,24 @@ impl MNANodeInfo {
     }
 }
 // Store matrix as a vector of rows for easy pivots
-type MNAVector<'a> = Vec<MNACell<'a>>;
-type MNAMatrix<'a> = Vec<MNAVector<'a>>;
+type MNAVector = Vec<MNACell>;
+type MNAMatrix = Vec<MNAVector>;
 
 // Stores A and b for A*x - b = 0, where x is the solution.
 //
 // A is stored as a vector of rows, for easy in-place pivots
 //
 #[derive(Debug)]
-struct MNASystem<'a> {
+struct MNASystem {
     nodes: Vec<MNANodeInfo>,
-    a_matrix: MNAMatrix<'a>,
-    b: MNAVector<'a>,
+    a_matrix: MNAMatrix,
+    b: MNAVector,
     time: f64,
     net_size: usize,
+    vars: Vec<f64>,
 }
 
-impl Default for MNASystem<'_> {
+impl Default for MNASystem {
     fn default() -> Self {
         MNASystem {
             nodes: vec![],
@@ -130,11 +131,12 @@ impl Default for MNASystem<'_> {
             b: MNAVector::default(),
             time: 0.0,
             net_size: 0,
+            vars: vec![],
         }
     }
 }
 
-impl<'a> MNASystem<'a> {
+impl MNASystem {
     fn set_size(&mut self, n: usize) {
         self.a_matrix.resize_with(n, Default::default);
         self.b.resize_with(n, Default::default);
@@ -155,15 +157,30 @@ impl<'a> MNASystem<'a> {
         self.a_matrix[r][c].txt += txt;
     }
 
-    /// Reserve a fresh variable for a comonent's internal state tracking
+    /// Reserve a fresh net position for a component's internal use
     fn reserve(&mut self) -> usize {
         let sz = self.net_size;
         self.net_size += 1;
         return sz;
     }
+
+    /// Reserve a fresh dynamic variable for a component's state tracking
+    fn reserve_dynamic(&mut self) -> usize {
+        let sz = self.vars.len();
+        self.vars.push(0.);
+        return sz;
+    }
+
+    /// Let component update dynamic value that is referenced in cells
+    fn set_dynamic(&mut self, index: usize, v: f64) {
+        self.vars[index] = v;
+    }
 }
 
 trait Component {
+    // stamp constants into the matrix
+    fn stamp(&self, m: &mut MNASystem) {}
+
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
     // testing to make sure we can code-gen stuff
@@ -211,17 +228,21 @@ struct Resistor {
 
 impl Resistor {
     fn new(m: &mut MNASystem, r: f64, l0: usize, l1: usize) -> Self {
+        Self { r, l0, l1 }
+    }
+}
+
+impl Component for Resistor {
+    fn stamp(&self, m: &mut MNASystem) {
+        let (r, l0, l1) = (self.r, self.l0, self.l1);
         let g = 1.0 / r;
         let txt = format!("R{}", format_unit_value(r, ""));
         m.stamp_static(g, l0, l0, &format!("+{}", txt));
         m.stamp_static(-g, l0, l1, &format!("-{}", txt));
         m.stamp_static(-g, l1, l0, &format!("-{}", txt));
         m.stamp_static(g, l1, l1, &format!("+{}", txt));
-        Self { r, l0, l1 }
     }
 }
-
-impl Component for Resistor {}
 
 #[derive(Debug)]
 struct Capacitor {
@@ -230,11 +251,20 @@ struct Capacitor {
     l1: usize,
     l2: usize,
     state_var: f64,
+    dyn_index: usize,
     voltage: f64,
 }
 
 impl Capacitor {
     fn new(m: &mut MNASystem, c: f64, l0: usize, l1: usize) -> Self {
+        let l2 = m.reserve();
+        let dyn_index = m.reserve_dynamic();
+        Self { c, l0, l1, l2, state_var: 0., voltage: 0., dyn_index }
+    }
+}
+
+impl Component for Capacitor {
+    fn stamp(&self, m: &mut MNASystem) {
         // we can use a trick here, to get the capacitor to
         // work on it's own line with direct trapezoidal:
         //
@@ -260,7 +290,7 @@ impl Capacitor {
         //
         // trapezoidal needs another factor of two for the g
         // since c*(v1 - v0) = (i1 + i0)/(2*t), where t = 1/T
-        let l2 = m.reserve();
+        let (c, l0, l1, l2, dyn_index) = (self.c, self.l0, self.l1, self.l2, self.dyn_index);
         let txt = format_unit_value(c, "F");
         let g = 2.0 * c;
         m.stamp_timed(1., l0, l2, "+t");
@@ -272,11 +302,15 @@ impl Capacitor {
         m.stamp_static(2. * g, l2, l0, &format!("+2*{}", txt));
         m.stamp_static(-2. * g, l2, l1, &format!("-2*{}", txt));
         m.stamp_static(-1., l2, l2, &"-1");
-        Self { c, l0, l1, l2, state_var: 0., voltage: 0. }
+
+        m.b[l2].g_dyn.push(dyn_index);
+        m.b[l2].txt = String::from(format!("q:C:{},{}", l0, l1));
+        // this isn't quite right as state stores 2*c*v - i/t
+        // however, we'll fix this in updateFull() for display
+        m.nodes[l2].name = String::from(format!("v:C:{},{}", l0, l1));
+        m.nodes[l2].scale = 1. / c;
     }
 }
-
-impl Component for Capacitor {}
 
 
 #[cfg(test)]
@@ -313,17 +347,24 @@ mod tests {
         s.set_size(3);
         let c1 = Resistor::new(&mut s, 100.0, 0, 1);
         let c2 = Resistor::new(&mut s, 100.0, 1, 2);
+        let c3 = Capacitor::new(&mut s, 0.1, 1, 2);
         println!("{:?}", &c1);
-        let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2)];
+        c1.stamp(&mut s);
+        c2.stamp(&mut s);
+        c3.stamp(&mut s);
+        let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2), Box::new(c3)];
         Ok(())
     }
 }
 
 fn main() {
-    let mut system = MNASystem::default();
-    system.set_size(2);
-    let c1 = Resistor::new(&mut system, 100.0, 0, 1);
+    let mut s = MNASystem::default();
+    s.set_size(3);
+    let c1 = Resistor::new(&mut s, 100.0, 0, 1);
+    let c2 = Resistor::new(&mut s, 100.0, 1, 2);
+    let c3 = Capacitor::new(&mut s, 0.1, 1, 2);
+
     println!("Hello from sim.rs");
-    println!("{:?}", system);
+    println!("{:?}", s);
     println!("Resistor is {}", format_unit_value(1500.0, " Ohms"));
 }
