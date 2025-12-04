@@ -209,9 +209,31 @@ impl Component for BaseComponent {
     fn scale_time(&mut self, t_old_per_new: f64) {}
 }
 
+const unitValueOffset: i32 = 4;
+const unitValueMax: i32 = 8;
+const unitValueSuffixes: [&'static str; unitValueMax as usize] =
+    ["p", "n", "u", "m", "", "k", "M", "G"];
+
+fn format_unit_value(v: f64, unit: &str) -> String {
+    let mut suff: i32 = unitValueOffset + (v.log10() as i32) / 3;
+    if v < 1.0 {
+        suff -= 1;
+    }
+    if suff < 0 {
+        suff = 0;
+    }
+    if suff > unitValueMax {
+        suff = unitValueMax;
+    }
+    let vr = v / f64::powf(10.0, 3.0 * ((suff - unitValueOffset) as f64));
+    // Use as many decimals as needed, or none if not needed
+    return format!("{:.}{}{}", vr, unitValueSuffixes[suff as usize], unit);
+}
+
 fn main() {
     let mut system = MNASystem::default();
     system.set_size(3);
     println!("Hello from sim.rs");
     println!("{:?}", system);
+    println!("Resistor is {}", format_unit_value(1500.0, "Ohms"));
 }
