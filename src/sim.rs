@@ -166,13 +166,13 @@ trait Component {
     //  - netSize is the current size of the netlist
     //  - pins is a vector of circuits nodes
     //
-    fn setup_nets(&self, net_size: &mut usize, states: &mut usize, pins: Vec<usize>);
+    fn setup_nets(&mut self, net_size: &mut usize, states: usize, pins: Vec<usize>);
 
     // this is for allocating state variables
-    fn setup_states(states: &mut usize) {}
+    fn setup_states(&mut self, states: usize);
 
     // stamp constants into the matrix
-    fn stamp(system: &mut MNASystem);
+    fn stamp(&self, system: &mut MNASystem);
 
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
@@ -189,8 +189,26 @@ trait Component {
     fn scale_time(t_old_per_new: f64) {}
 }
 
-struct BaseComponent <const nPins: usize> {
+struct BaseComponent {
     pin_loc: Vec<usize>,
+    nets: Vec<usize>,
+}
+
+impl Component for BaseComponent {
+    fn pin_count(&self) -> usize {
+        self.pin_loc.len()
+    }
+    fn get_pin_locs(&self) -> Vec<usize> {
+        self.pin_loc.clone()
+    }
+    fn setup_nets(&mut self, net_size: &mut usize, states: usize, pins: Vec<usize>) {
+        for i in 0..self.pin_loc.len() {
+            self.nets[i] = self.pin_loc[i];
+        }
+    }
+    fn setup_states(&mut self, states: usize) {}
+
+    fn stamp(&self, system: &mut MNASystem) {}
 }
 
 fn main() {
