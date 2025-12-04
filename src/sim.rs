@@ -235,16 +235,43 @@ struct Capacitor {
 
 impl Capacitor {
     fn new(m: &mut MNASystem, c: f64, l0: usize, l1: usize) -> Self {
+        // we can use a trick here, to get the capacitor to
+        // work on it's own line with direct trapezoidal:
+        //
+        // | -g*t  +g*t  +t | v+
+        // | +g*t  -g*t  -t | v-
+        // | +2*g  -2*g  -1 | state
+        //
+        // the logic with this is that for constant timestep:
+        //
+        //  i1 = g*v1 - s0   , s0 = g*v0 + i0
+        //  s1 = 2*g*v1 - s0 <-> s0 = 2*g*v1 - s1
+        //
+        // then if we substitute back:
+        //  i1 = g*v1 - (2*g*v1 - s1)
+        //     = s1 - g*v1
+        //
+        // this way we just need to copy the new state to the
+        // next timestep and there's no actual integration needed
+        //
+        // the "half time-step" error here means that our state
+        // is 2*c*v - i/t but we fix this for display in update
+        // and correct the current-part on time-step changes
+        //
+        // trapezoidal needs another factor of two for the g
+        // since c*(v1 - v0) = (i1 + i0)/(2*t), where t = 1/T
         let l2 = m.reserve();
-        let txt = format!("{}", format_unit_value(c, "F"));
+        let txt = format_unit_value(c, "F");
         let g = 2.0 * c;
         m.stamp_timed(1., l0, l2, "+t");
-        m.stamp_timed(1., l1, l2, "-t");
-
-        // m.stamp_static(g, l0, l0, &"+t");
-        // m.stamp_static(-g, l0, l1, &format!("-{}", txt));
-        // m.stamp_static(-g, l1, l0, &format!("-{}", txt));
-        // m.stamp_static(g, l1, l1, &format!("+{}", txt));
+        m.stamp_timed(-1., l1, l2, "-t");
+        m.stamp_timed(-g, l0, l0, &format!("-t*{}", txt));
+        m.stamp_timed(g, l0, l1, &format!("+t*{}", txt));
+        m.stamp_timed(g, l1, l0, &format!("+t*{}", txt));
+        m.stamp_timed(-g, l1, l1, &format!("-t*{}", txt));
+        m.stamp_static(2. * g, l2, l0, &format!("+2*{}", txt));
+        m.stamp_static(-2. * g, l2, l1, &format!("-2*{}", txt));
+        m.stamp_static(-1., l2, l2, &"-1");
         Self { c, l0, l1, l2, state_var: 0., voltage: 0. }
     }
 }
