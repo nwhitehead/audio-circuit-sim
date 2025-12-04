@@ -64,12 +64,12 @@ impl Default for MNACell<'_> {
 
 impl<'a> MNACell<'a> {
     /// Setup pre_lu cache
-    fn init_lu(self: &mut Self, step_scale: f64) {
+    fn init_lu(&mut self, step_scale: f64) {
         self.pre_lu = self.g + self.g_timed * step_scale;
     }
 
     /// Restore matrix state and update dynamic values
-    fn update_pre(self: &mut Self) {
+    fn update_pre(&mut self) {
         self.lu = self.pre_lu;
         for d in self.g_dyn.iter() {
             self.lu += *d;
@@ -135,7 +135,7 @@ impl Default for MNASystem<'_> {
 }
 
 impl<'a> MNASystem<'a> {
-    fn set_size(self: &mut Self, n: usize) {
+    fn set_size(&mut self, n: usize) {
         self.a_matrix.resize_with(n, Default::default);
         self.b.resize_with(n, Default::default);
         for i in 0..n {
@@ -145,17 +145,17 @@ impl<'a> MNASystem<'a> {
         self.net_size = n;
     }
 
-    fn stamp_static(self: &mut Self, value: f64, r: usize, c: usize, txt: &str) {
+    fn stamp_static(&mut self, value: f64, r: usize, c: usize, txt: &str) {
         self.a_matrix[r][c].g += value;
         self.a_matrix[r][c].txt += txt;
     }
 
-    fn stamp_timed(self: &mut Self, value: f64, r: usize, c: usize, txt: &str) {
+    fn stamp_timed(&mut self, value: f64, r: usize, c: usize, txt: &str) {
         self.a_matrix[r][c].g_timed += value;
         self.a_matrix[r][c].txt += txt;
     }
 
-    fn reserve(self: &mut Self) -> usize {
+    fn reserve(&mut self) -> usize {
         let sz = self.net_size;
         self.net_size += 1;
         return sz;
@@ -181,6 +181,7 @@ trait Component {
     fn scale_time(&mut self, t_old_per_new: f64) {}
 }
 
+#[derive(Debug)]
 struct BaseComponentNet {
     nets: Vec<usize>,
 }
@@ -226,6 +227,7 @@ fn format_unit_value(v: f64, unit: &str) -> String {
     return format!("{:.}{}{}", vr, UNIT_VALUE_SUFFIXES[suff as usize], unit);
 }
 
+#[derive(Debug)]
 struct Resistor {
     bcn: BaseComponentNet,
     v: f64,
@@ -276,6 +278,7 @@ mod tests {
         s.set_size(3);
         let c1 = Resistor::new(&mut s, 100.0, 0, 1);
         let c2 = Resistor::new(&mut s, 100.0, 1, 2);
+        println!("{:?}", &c1);
         let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2)];
         Ok(())
     }
@@ -284,6 +287,7 @@ mod tests {
 fn main() {
     let mut system = MNASystem::default();
     system.set_size(3);
+    let c1 = Resistor::new(&mut system, 100.0, 0, 1);
     println!("Hello from sim.rs");
     println!("{:?}", system);
     println!("Resistor is {}", format_unit_value(1500.0, "Ohms"));
