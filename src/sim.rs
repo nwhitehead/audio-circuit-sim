@@ -119,6 +119,7 @@ struct MNASystem<'a> {
     a_matrix: MNAMatrix<'a>,
     b: MNAVector<'a>,
     time: f64,
+    net_size: usize,
 }
 
 impl Default for MNASystem<'_> {
@@ -128,6 +129,7 @@ impl Default for MNASystem<'_> {
             a_matrix: MNAMatrix::default(),
             b: MNAVector::default(),
             time: 0.0,
+            net_size: 0,
         }
     }
 }
@@ -140,6 +142,7 @@ impl<'a> MNASystem<'a> {
             self.a_matrix[i].resize_with(n, Default::default);
             self.nodes.push(MNANodeInfo::new_voltage(i));
         }
+        self.net_size = n;
     }
 
     fn stamp_static(self: &mut Self, value: f64, r: usize, c: usize, txt: &str) {
@@ -150,6 +153,12 @@ impl<'a> MNASystem<'a> {
     fn stamp_timed(self: &mut Self, value: f64, r: usize, c: usize, txt: &str) {
         self.a_matrix[r][c].g_timed += value;
         self.a_matrix[r][c].txt += txt;
+    }
+
+    fn reserve(self: &mut Self) -> usize {
+        let sz = self.net_size;
+        self.net_size += 1;
+        return sz;
     }
 }
 
@@ -172,53 +181,66 @@ trait Component {
     fn scale_time(&mut self, t_old_per_new: f64) {}
 }
 
-struct BaseComponent {
+struct BaseComponentNet {
     nets: Vec<usize>,
 }
 
-impl BaseComponent {
-    // setup pins and calculate the size of the full netlist
-    // the Component will handle this automatically
+impl BaseComponentNet {
+    // Map component pin locations to net, together with internal state variables
+    // Internal state variables increase global net_size
     //
-    //  - netSize is the current size of the netlist
+    //  - net_size is the current size of the netlist
     //  - pins is a vector of circuits nodes
+    //  - num_state is number of internal state variables needed
     //
-    fn setup(net_size: &mut usize, pins: Vec<usize>, num_state: usize) -> Self {
+    fn setup(system: &mut MNASystem, pins: Vec<usize>, num_state: usize) -> Self {
         let mut nets = vec![];
         for pin in pins {
             nets.push(pin);
         }
         for i in 0..num_state {
-            let sz = *net_size;
-            nets.push(sz);
-            *net_size += 1;
+            nets.push(system.reserve());
         }
         return Self { nets };
     }
 }
 
-impl Component for BaseComponent {}
-
-const unitValueOffset: i32 = 4;
-const unitValueMax: i32 = 8;
-const unitValueSuffixes: [&'static str; unitValueMax as usize] =
+const UNIT_VALUE_OFFSET: i32 = 4;
+const UNIT_VALUE_MAX: i32 = 8;
+const UNIT_VALUE_SUFFIXES: [&'static str; UNIT_VALUE_MAX as usize] =
     ["p", "n", "u", "m", "", "k", "M", "G"];
 
 fn format_unit_value(v: f64, unit: &str) -> String {
-    let mut suff: i32 = unitValueOffset + (v.log10() as i32) / 3;
+    let mut suff: i32 = UNIT_VALUE_OFFSET + (v.log10() as i32) / 3;
     if v < 1.0 {
         suff -= 1;
     }
     if suff < 0 {
         suff = 0;
     }
-    if suff > unitValueMax {
-        suff = unitValueMax;
+    if suff > UNIT_VALUE_MAX {
+        suff = UNIT_VALUE_MAX;
     }
-    let vr = v / f64::powf(10.0, 3.0 * ((suff - unitValueOffset) as f64));
+    let vr = v / f64::powf(10.0, 3.0 * ((suff - UNIT_VALUE_OFFSET) as f64));
     // Use as many decimals as needed, or none if not needed
-    return format!("{:.}{}{}", vr, unitValueSuffixes[suff as usize], unit);
+    return format!("{:.}{}{}", vr, UNIT_VALUE_SUFFIXES[suff as usize], unit);
 }
+
+struct Resistor {
+    bcn: BaseComponentNet,
+    v: f64,
+}
+
+impl Resistor {
+    fn new(system: &mut MNASystem, v: f64, l0: usize, l1: usize) -> Self {
+        Self {
+            bcn: BaseComponentNet::setup(system, vec![l0, l1], 0),
+            v,
+        }
+    }
+}
+
+impl Component for Resistor {}
 
 #[cfg(test)]
 mod tests {
@@ -251,9 +273,9 @@ mod tests {
     #[test]
     fn test_component_polymorphism() -> Result<(), String> {
         let mut s = MNASystem::default();
-        let mut net_size = 0;
-        let c1 = BaseComponent::setup(&mut net_size, vec![0, 1], 2);
-        let c2 = BaseComponent::setup(&mut net_size, vec![1, 2], 1);
+        s.set_size(3);
+        let c1 = Resistor::new(&mut s, 100.0, 0, 1);
+        let c2 = Resistor::new(&mut s, 100.0, 1, 2);
         let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2)];
         Ok(())
     }
