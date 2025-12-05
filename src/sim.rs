@@ -184,7 +184,7 @@ trait Component {
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
     // testing to make sure we can code-gen stuff
-    fn update(&self, m: &mut MNASystem) {}
+    fn update(&mut self, m: &mut MNASystem) {}
 
     // return true if we're done - will keep iterating
     // until all the components are happy
@@ -304,12 +304,40 @@ impl Component for Capacitor {
         m.stamp_static(-1., l2, l2, &"-1");
 
         m.b[l2].g_dyn.push(dyn_index);
+        m.set_dynamic(dyn_index, self.state_var);
         m.b[l2].txt = String::from(format!("q:C:{},{}", l0, l1));
         // this isn't quite right as state stores 2*c*v - i/t
         // however, we'll fix this in updateFull() for display
         m.nodes[l2].name = String::from(format!("v:C:{},{}", l0, l1));
         m.nodes[l2].scale = 1. / c;
     }
+
+    fn update(&mut self, m: &mut MNASystem) {
+        self.state_var = m.b[self.l2].lu;
+
+        // solve legit voltage from the pins
+        self.voltage = m.b[self.l0].lu - m.b[self.l1].lu;
+
+        // then we can store this for display here
+        // since this value won't be used at this point
+        m.b[self.l2].lu = self.c * self.voltage;
+
+        // Update dynamic variable since we changed state_var
+        m.set_dynamic(self.dyn_index, self.state_var);
+    }
+
+    fn scale_time(&mut self, t_old_per_new: f64) {
+        // the state is 2*c*voltage - i/t0
+        // so we subtract out the voltage, scale current
+        // and then add the voltage back to get new state
+        //
+        // note that this also works if the old rate is infinite
+        // (ie. t0=0) when going from DC analysis to transient
+        //
+        let qq = 2. * self.c * self.voltage;
+        self.state_var = qq + (self.state_var - qq) * t_old_per_new;
+    }
+
 }
 
 
