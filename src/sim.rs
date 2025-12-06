@@ -193,7 +193,7 @@ trait Component {
     }
 
     // time-step change, fix their state-variables (used for caps)
-    fn scale_time(&mut self, t_old_per_new: f64) {}
+    fn scale_time(&mut self, m: &mut MNASystem, t_old_per_new: f64) {}
 }
 
 const UNIT_VALUE_OFFSET: i32 = 4;
@@ -326,7 +326,7 @@ impl Component for Capacitor {
         m.set_dynamic(self.dyn_index, self.state_var);
     }
 
-    fn scale_time(&mut self, t_old_per_new: f64) {
+    fn scale_time(&mut self, m: &mut MNASystem, t_old_per_new: f64) {
         // the state is 2*c*voltage - i/t0
         // so we subtract out the voltage, scale current
         // and then add the voltage back to get new state
@@ -336,8 +336,42 @@ impl Component for Capacitor {
         //
         let qq = 2. * self.c * self.voltage;
         self.state_var = qq + (self.state_var - qq) * t_old_per_new;
+
+        // Update dynamic variable since we changed state_var
+        m.set_dynamic(self.dyn_index, self.state_var);
     }
 
+}
+
+#[derive(Debug)]
+struct VoltageSource {
+    v: f64,
+    l0: usize,
+    l1: usize,
+    l2: usize,
+}
+
+impl VoltageSource {
+    fn new(m: &mut MNASystem, v: f64, l0: usize, l1: usize) -> Self {
+        let l2 = m.reserve();
+        Self { v, l0, l1, l2 }
+    }
+}
+
+impl Component for VoltageSource {
+    fn stamp(&self, m: &mut MNASystem) {
+        let (v, l0, l1, l2) = (self.v, self.l0, self.l1, self.l2);
+        m.stamp_static(-1., l0, l2, &"-1");
+        m.stamp_static(1., l1, l2, &"+1");
+        m.stamp_static(1., l2, l0, &"+1");
+        m.stamp_static(-1., l2, l1, &"-1");
+
+        m.b[l2].g = v;
+        m.b[l2].txt = String::from(format!("{:.}V", v));
+
+        m.nodes[l2].name = format!("i:V({:.}:{},{})", v, l0, l1);
+        m.nodes[l2].info_type = InfoType::CURRENT;
+    }
 }
 
 
