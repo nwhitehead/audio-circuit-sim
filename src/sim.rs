@@ -403,6 +403,55 @@ impl Component for VoltageProbe {
 }
 
 
+#[derive(Debug)]
+struct VoltageFunction {
+    // probe a differential voltage
+    // also forces this voltage to actually get solved :)
+    v: f64,
+    f: fn(f64) -> f64,
+    dyn_index: usize,
+    l0: usize,
+    l1: usize,
+    l2: usize,
+}
+
+impl VoltageFunction {
+    fn new(m: &mut MNASystem, f: fn(f64) -> f64, l0: usize, l1: usize) -> Self {
+        let l2 = m.reserve();
+        let dyn_index = m.reserve_dynamic();
+        let v = f(0.0);
+        Self { v, f, dyn_index, l0, l1, l2 }
+    }
+}
+
+impl Component for VoltageFunction {
+    fn stamp(&self, m: &mut MNASystem) {
+        let (v, f, dyn_index, l0, l1, l2) = (self.v, self.f, self.dyn_index, self.l0, self.l1, self.l2);
+
+        // this is identical to voltage source
+        // except voltage is dynanic
+        m.stamp_static(-1., l0, l2, &"-1");
+        m.stamp_static(1., l1, l2, &"+1");
+        m.stamp_static(1., l2, l0, &"+1");
+        m.stamp_static(-1., l2, l1, &"-1");
+
+        m.b[l2].g_dyn.push(dyn_index);
+        m.set_dynamic(dyn_index, self.v);
+        m.b[l2].txt = String::from(format!("Vfn:{},{}", l0, l1));
+
+        m.nodes[l2].name = format!("i:Vfn:{},{}", l0, l1);
+        m.nodes[l2].info_type = InfoType::CURRENT;
+    }
+
+    fn update(&mut self, m: &mut MNASystem) {
+        self.v = (self.f)(m.time);
+        // Update dynamic variable since we changed state_var
+        m.set_dynamic(self.dyn_index, self.v);
+    }
+
+}
+
+
 
 #[cfg(test)]
 mod tests {
