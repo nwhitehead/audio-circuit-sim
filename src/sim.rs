@@ -374,6 +374,35 @@ impl Component for VoltageSource {
     }
 }
 
+#[derive(Debug)]
+struct VoltageProbe {
+    // probe a differential voltage
+    // also forces this voltage to actually get solved :)
+    l0: usize,
+    l1: usize,
+    l2: usize,
+}
+
+impl VoltageProbe {
+    fn new(m: &mut MNASystem, l0: usize, l1: usize) -> Self {
+        let l2 = m.reserve();
+        Self { l0, l1, l2 }
+    }
+}
+
+impl Component for VoltageProbe {
+    fn stamp(&self, m: &mut MNASystem) {
+        let (l0, l1, l2) = (self.l0, self.l1, self.l2);
+
+        // vp + vn - vd = 0     so      vp = vd - vn
+        m.stamp_static(1., l2, l0, "+1");
+        m.stamp_static(-1., l2, l1, "-1");
+        m.stamp_static(-1., l2, l2, "-1");
+        m.nodes[l2].name = "v:probe".into();
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
