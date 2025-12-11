@@ -523,6 +523,59 @@ impl JunctionPN {
     }
 }
 
+struct DiodeParameters {
+    // series resistor model
+    rs: f64,
+    // reverse bias saturation current
+    is: f64,
+    // ideality factor
+    n: f64,
+}
+
+impl Default for DiodeParameters {
+    fn default() -> Self {
+        Self {
+            rs: 10.0,
+            is: 35.0e-12,
+            n: 1.24,
+        }
+    }
+}
+
+struct Diode {
+    l0: usize,
+    l1: usize,
+    l2: usize,
+    l3: usize,
+    dyn_index0: usize,
+    dyn_index1: usize,
+    pn: JunctionPN,
+    rs: f64,
+}
+
+impl Diode {
+    fn new(m: &mut MNASystem, l0: usize, l1: usize, params: DiodeParameters ) -> Self {
+        let l2 = m.reserve();
+        let l3 = m.reserve();
+        let dyn_index0 = m.reserve_dynamic();
+        let dyn_index1 = m.reserve_dynamic();
+        let mut pn = JunctionPN::new(params.is, params.n);
+        // initial condition has v=0
+        pn.linearize(0.0);
+        Self {
+            l0,
+            l1,
+            l2,
+            l3,
+            dyn_index0,
+            dyn_index1,
+            rs: params.rs,
+            pn,
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
