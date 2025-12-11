@@ -259,7 +259,15 @@ impl Capacitor {
     fn new(m: &mut MNASystem, c: f64, l0: usize, l1: usize) -> Self {
         let l2 = m.reserve();
         let dyn_index = m.reserve_dynamic();
-        Self { c, l0, l1, l2, state_var: 0., voltage: 0., dyn_index }
+        Self {
+            c,
+            l0,
+            l1,
+            l2,
+            state_var: 0.,
+            voltage: 0.,
+            dyn_index,
+        }
     }
 }
 
@@ -340,7 +348,6 @@ impl Component for Capacitor {
         // Update dynamic variable since we changed state_var
         m.set_dynamic(self.dyn_index, self.state_var);
     }
-
 }
 
 #[derive(Debug)]
@@ -402,7 +409,6 @@ impl Component for VoltageProbe {
     }
 }
 
-
 #[derive(Debug)]
 struct VoltageFunction {
     // probe a differential voltage
@@ -420,13 +426,21 @@ impl VoltageFunction {
         let l2 = m.reserve();
         let dyn_index = m.reserve_dynamic();
         let v = f(0.0);
-        Self { v, f, dyn_index, l0, l1, l2 }
+        Self {
+            v,
+            f,
+            dyn_index,
+            l0,
+            l1,
+            l2,
+        }
     }
 }
 
 impl Component for VoltageFunction {
     fn stamp(&self, m: &mut MNASystem) {
-        let (v, f, dyn_index, l0, l1, l2) = (self.v, self.f, self.dyn_index, self.l0, self.l1, self.l2);
+        let (v, f, dyn_index, l0, l1, l2) =
+            (self.v, self.f, self.dyn_index, self.l0, self.l1, self.l2);
 
         // this is identical to voltage source
         // except voltage is dynanic
@@ -448,7 +462,6 @@ impl Component for VoltageFunction {
         // Update dynamic variable since we changed state_var
         m.set_dynamic(self.dyn_index, self.v);
     }
-
 }
 
 struct JunctionPN {
@@ -476,6 +489,7 @@ impl JunctionPN {
             vcrit: nvt * f64::ln(nvt / (is * f64::sqrt(2.0))),
         }
     }
+
     fn linearize(&mut self, v: f64) {
         // linearize junction at the specified voltage
         //
@@ -489,6 +503,23 @@ impl JunctionPN {
         self.geq = g;
         self.ieq = v * g - i;
         self.veq = v;
+    }
+
+    // returns true if junction is good enough
+    fn newton(&mut self, v: f64) -> bool {
+        let dv = v - self.veq;
+        if f64::abs(dv) < V_TOLERANCE {
+            return true;
+        }
+        // check critical voltage and adjust voltage if over
+        let vv = if v > self.vcrit {
+            // this formula comes from Qucs documentation
+            self.veq + self.nvt * f64::ln(f64::max(self.is, 1.0 + dv * self.rnvt))
+        } else {
+            v
+        };
+        self.linearize(vv);
+        return false;
     }
 }
 
