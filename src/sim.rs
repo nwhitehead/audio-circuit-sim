@@ -451,7 +451,46 @@ impl Component for VoltageFunction {
 
 }
 
+struct JunctionPN {
+    // variables
+    geq: f64,
+    ieq: f64,
+    veq: f64,
+    // parameters
+    is: f64,
+    nvt: f64,
+    rnvt: f64,
+    vcrit: f64,
+}
 
+impl JunctionPN {
+    fn new(is: f64, n: f64) -> Self {
+        let nvt = n * V_THERMAL;
+        Self {
+            geq: 0.0,
+            ieq: 0.0,
+            veq: 0.0,
+            is,
+            nvt,
+            rnvt: 1. / nvt,
+            vcrit: nvt * f64::ln(nvt / (is * f64::sqrt(2.0))),
+        }
+    }
+    fn linearize(&mut self, v: f64) {
+        // linearize junction at the specified voltage
+        //
+        // ideally we could handle series resistance here as well
+        // to avoid putting it on a separate node, but not sure how
+        // to make that work as it looks like we'd need Lambert-W then
+        let e = self.is * f64::exp(v * self.rnvt);
+        let i = e - self.is + G_MIN * v;
+        let g = e * self.rnvt + G_MIN;
+
+        self.geq = g;
+        self.ieq = v * g - i;
+        self.veq = v;
+    }
+}
 
 #[cfg(test)]
 mod tests {
