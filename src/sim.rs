@@ -140,6 +140,7 @@ impl MNASystem {
     fn set_size(&mut self, n: usize) {
         self.a_matrix.resize_with(n, Default::default);
         self.b.resize_with(n, Default::default);
+        self.nodes.clear();
         for i in 0..n {
             self.a_matrix[i].resize_with(n, Default::default);
             self.nodes.push(MNANodeInfo::new_voltage(i));
@@ -161,6 +162,7 @@ impl MNASystem {
     fn reserve(&mut self) -> usize {
         let sz = self.net_size;
         self.net_size += 1;
+        self.set_size(self.net_size);
         return sz;
     }
 
@@ -464,6 +466,7 @@ impl Component for VoltageFunction {
     }
 }
 
+#[derive(Debug)]
 struct JunctionPN {
     // variables
     geq: f64,
@@ -523,6 +526,7 @@ impl JunctionPN {
     }
 }
 
+#[derive(Debug)]
 struct DiodeParameters {
     // series resistor model
     rs: f64,
@@ -542,6 +546,7 @@ impl Default for DiodeParameters {
     }
 }
 
+#[derive(Debug)]
 struct Diode {
     l0: usize,
     l1: usize,
@@ -605,6 +610,11 @@ mod tests {
     }
 
     #[test]
+    fn test_pn() -> Result<(), String> {
+        Ok(())
+    }
+
+    #[test]
     fn test_component_polymorphism() -> Result<(), String> {
         let mut s = MNASystem::default();
         s.set_size(3);
@@ -612,6 +622,7 @@ mod tests {
         let c2 = Resistor::new(&mut s, 100.0, 1, 2);
         let c3 = Capacitor::new(&mut s, 0.1, 1, 2);
         println!("{:?}", &c1);
+        println!("{:?}", &c3);
         c1.stamp(&mut s);
         c2.stamp(&mut s);
         c3.stamp(&mut s);
