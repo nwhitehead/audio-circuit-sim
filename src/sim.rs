@@ -517,6 +517,7 @@ impl JunctionPN {
         // check critical voltage and adjust voltage if over
         let vv = if v > self.vcrit {
             // this formula comes from Qucs documentation
+            // https://qucs.sourceforge.net/tech/node16.html#SECTION00431000000000000000
             self.veq + self.nvt * f64::ln(f64::max(self.is, 1.0 + dv * self.rnvt))
         } else {
             v
@@ -538,6 +539,7 @@ struct DiodeParameters {
 
 impl Default for DiodeParameters {
     fn default() -> Self {
+        // Default diode approximates 1N4148
         Self {
             rs: 10.0,
             is: 35.0e-12,
@@ -584,6 +586,7 @@ impl Diode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use float_cmp::approx_eq;
 
     #[test]
     fn test_format_unit_value() -> Result<(), String> {
@@ -611,6 +614,31 @@ mod tests {
 
     #[test]
     fn test_pn() -> Result<(), String> {
+        // Similar to 1N4148 (but just PN junction)
+        let mut pn = JunctionPN::new(/*is=*/35.0e-12, /*n=*/1.24);
+        // vcrit is point where current increases faster than voltage as voltage increases
+        assert!(approx_eq!(f64, pn.vcrit, 0.6542963597947701, ulps=100));
+        // Check ieq for a couple voltages
+        pn.newton(0.5);
+        assert!(approx_eq!(f64, pn.ieq, 0.002760783529589722, ulps=100));
+        pn.newton(0.4);
+        assert!(approx_eq!(f64, pn.ieq, 0.0000976127760265226, ulps=100));
+        // 0.4 should just take 1 newton step (below vcrit)
+        let mut done = pn.newton(0.4);
+        assert!(done);
+        // 0.8 takes more than 2 iterations because of qucs current thing
+        done = pn.newton(0.8);
+        assert!(!done);
+        done = pn.newton(0.8);
+        assert!(!done);
+        // But with more iterations it should converge
+        for i in 0..10 {
+            done = pn.newton(0.8);
+            if done {
+                break;
+            }
+        }
+        assert!(done);
         Ok(())
     }
 

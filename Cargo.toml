@@ -8,6 +8,7 @@ default-run = "gui"
 eframe = "0.31.1"
 egui_extras = "0.31.1"
 env_logger = "0.11.8"
+float-cmp = "0.10.0"
 glam = "0.30.3"
 serde_json = "1.0.140"
 
