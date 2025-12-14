@@ -177,20 +177,35 @@ impl MNASystem {
     fn set_dynamic(&mut self, index: usize, v: f64) {
         self.vars[index] = v;
     }
+
+    /// Add dynamic variable to cell
+    fn add_dynamic_b(&mut self, r: usize, index: usize, text: &str) {
+        self.b[r].g_dyn.push(index);
+        self.b[r].txt = String::from(text);
+    }
+    fn add_dynamic_a(&mut self, r: usize, c: usize, index: usize, text: &str) {
+        self.a_matrix[r][c].g_dyn.push(index);
+        self.a_matrix[r][c].txt = String::from(text);
+    }
 }
 
 trait Component {
     // stamp constants into the matrix
     fn stamp(&self, m: &mut MNASystem) {}
 
+    // update dynamic variables in m
+    fn update_dynamic(&self, m: &mut MNASystem) {}
+
     // update state variables, only tagged nodes
     // this is intended for fixed-time compatible
     // testing to make sure we can code-gen stuff
-    fn update(&mut self, m: &mut MNASystem) {}
+    fn update(&mut self, m: &mut MNASystem) {
+        self.update_dynamic(m);
+    }
 
     // return true if we're done - will keep iterating
     // until all the components are happy
-    fn newton(&self, m: &mut MNASystem) -> bool {
+    fn newton(&mut self, m: &mut MNASystem) -> bool {
         true
     }
 
@@ -313,13 +328,17 @@ impl Component for Capacitor {
         m.stamp_static(-2. * g, l2, l1, &format!("-2*{}", txt));
         m.stamp_static(-1., l2, l2, &"-1");
 
-        m.b[l2].g_dyn.push(dyn_index);
-        m.set_dynamic(dyn_index, self.state_var);
-        m.b[l2].txt = String::from(format!("q:C:{},{}", l0, l1));
+        m.add_dynamic_b(l2, dyn_index, &format!("q:C:{},{}", l0, l1));
+
         // this isn't quite right as state stores 2*c*v - i/t
         // however, we'll fix this in updateFull() for display
         m.nodes[l2].name = String::from(format!("v:C:{},{}", l0, l1));
         m.nodes[l2].scale = 1. / c;
+        self.update_dynamic(m);
+    }
+
+    fn update_dynamic(&self, m: &mut MNASystem) {
+        m.set_dynamic(self.dyn_index, self.state_var);
     }
 
     fn update(&mut self, m: &mut MNASystem) {
@@ -333,7 +352,7 @@ impl Component for Capacitor {
         m.b[self.l2].lu = self.c * self.voltage;
 
         // Update dynamic variable since we changed state_var
-        m.set_dynamic(self.dyn_index, self.state_var);
+        self.update_dynamic(m);
     }
 
     fn scale_time(&mut self, m: &mut MNASystem, t_old_per_new: f64) {
@@ -346,9 +365,7 @@ impl Component for Capacitor {
         //
         let qq = 2. * self.c * self.voltage;
         self.state_var = qq + (self.state_var - qq) * t_old_per_new;
-
-        // Update dynamic variable since we changed state_var
-        m.set_dynamic(self.dyn_index, self.state_var);
+        self.update_dynamic(m);
     }
 }
 
@@ -451,18 +468,20 @@ impl Component for VoltageFunction {
         m.stamp_static(1., l2, l0, &"+1");
         m.stamp_static(-1., l2, l1, &"-1");
 
-        m.b[l2].g_dyn.push(dyn_index);
-        m.set_dynamic(dyn_index, self.v);
-        m.b[l2].txt = String::from(format!("Vfn:{},{}", l0, l1));
+        m.add_dynamic_b(l2, dyn_index, &format!("Vfn:{},{}", l0, l1));
 
         m.nodes[l2].name = format!("i:Vfn:{},{}", l0, l1);
         m.nodes[l2].info_type = InfoType::CURRENT;
+        self.update_dynamic(m);
     }
 
+    fn update_dynamic(&self, m: &mut MNASystem) {
+        m.set_dynamic(self.dyn_index, self.v);
+    }
     fn update(&mut self, m: &mut MNASystem) {
         self.v = (self.f)(m.time);
         // Update dynamic variable since we changed state_var
-        m.set_dynamic(self.dyn_index, self.v);
+        self.update_dynamic(m);
     }
 }
 
@@ -582,6 +601,74 @@ impl Diode {
     }
 }
 
+impl Component for Diode {
+    fn stamp(&self, m: &mut MNASystem) {
+        let (l0, l1, l2, l3) =
+            (self.l0, self.l1, self.l2, self.l3);
+
+        // Diode could be built with 3 extra nodes:
+        //
+        // |  .  .    .       . +1 | V+
+        // |  .  .    .       . -1 | V-
+        // |  .  .  grs    -grs -1 | v:D
+        // |  .  . -grs grs+geq  . | v:pn = ieq
+        // | -1 +1   +1       .  . | i:pn
+        //
+        // Here grs is the 1/rs series conductance.
+        //
+        // This gives us the junction voltage (v:pn) and
+        // current (i:pn) and the composite voltage (v:D).
+        //
+        // The i:pn row is an ideal transformer connecting
+        // the floating diode to the ground-referenced v:D
+        // where we connect the series resistance to v:pn
+        // that solves the diode equation with Newton.
+        //
+        // We can then add the 3rd row to the bottom 2 with
+        // multipliers 1 and -rs = -1/grs and drop it:
+        //
+        // |  .  .   . +1 | V+
+        // |  .  .   . -1 | V-
+        // |  .  . geq -1 | v:pn = ieq
+        // | -1 +1  +1 rs | i:pn
+        //
+        // Note that only the v:pn row here is non-linear.
+        //
+        // We could even do away without the separate row for
+        // the current, which would lead to the following:
+        //
+        // | +grs -grs     -grs |
+        // | -grs +grs     +grs |
+        // | -grs +grs +grs+geq | = ieq
+        //
+        // In practice we keep the current row since it's
+        // nice to have it as an output anyway.
+        //
+        m.stamp_static(-1.0, l3, l0, "-1");
+        m.stamp_static(1.0, l3, l1, "+1");
+        m.stamp_static(1.0, l3, l2, "+1");
+        m.stamp_static(1.0, l0, l3, "+1");
+        m.stamp_static(-1.0, l1, l3, "-1");
+        m.stamp_static(-1.0, l2, l3, "-1");
+        m.stamp_static(self.rs, l3, l3, "rs:pn");
+
+        m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("Vfn:{},{}", l0, l1));
+        m.add_dynamic_b(l2, self.dyn_index1, &format!("i0:D:{},{}", l0, l1));
+        m.nodes[l2].name = format!("i:D:{},{}", l0, l1);
+        m.nodes[l2].info_type = InfoType::CURRENT;
+        self.update_dynamic(m);
+    }
+
+    fn update_dynamic(&self, m: &mut MNASystem) {
+        m.set_dynamic(self.dyn_index0, self.pn.geq);
+        m.set_dynamic(self.dyn_index1, self.pn.ieq);
+    }
+
+    fn newton(&mut self, m: &mut MNASystem) -> bool {
+        self.pn.newton(m.b[self.l2].lu)
+    }
+
+}
 
 #[cfg(test)]
 mod tests {
@@ -649,6 +736,7 @@ mod tests {
         let c1 = Resistor::new(&mut s, 100.0, 0, 1);
         let c2 = Resistor::new(&mut s, 100.0, 1, 2);
         let c3 = Capacitor::new(&mut s, 0.1, 1, 2);
+        let c4 = Diode::new(&mut s, 0, 1, DiodeParameters::default());
         println!("{:?}", &c1);
         println!("{:?}", &c3);
         c1.stamp(&mut s);
