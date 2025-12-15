@@ -651,11 +651,11 @@ impl Component for Diode {
         m.stamp_static(-1.0, l1, l3, "-1");
         m.stamp_static(-1.0, l2, l3, "-1");
         m.stamp_static(self.rs, l3, l3, "rs:pn");
-
-        m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("Vfn:{},{}", l0, l1));
+        m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("gm:D"));
         m.add_dynamic_b(l2, self.dyn_index1, &format!("i0:D:{},{}", l0, l1));
-        m.nodes[l2].name = format!("i:D:{},{}", l0, l1);
-        m.nodes[l2].info_type = InfoType::CURRENT;
+        m.nodes[l2].name = format!("v:D:{},{}", l0, l1);
+        m.nodes[l3].name = format!("i:D:{},{}", l0, l1);
+        m.nodes[l3].info_type = InfoType::CURRENT;
         self.update_dynamic(m);
     }
 
