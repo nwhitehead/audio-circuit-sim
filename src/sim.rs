@@ -501,8 +501,9 @@ struct JunctionPN {
 impl JunctionPN {
     fn new(is: f64, n: f64) -> Self {
         let nvt = n * V_THERMAL;
+        // initial state is linearized at v=0
         Self {
-            geq: 0.0,
+            geq: is / (n * V_THERMAL) + G_MIN,
             ieq: 0.0,
             veq: 0.0,
             is,
@@ -548,11 +549,11 @@ impl JunctionPN {
 
 #[derive(Debug)]
 struct DiodeParameters {
-    // series resistor model
+    // Series resistor in model
     rs: f64,
-    // reverse bias saturation current
+    // Reverse bias saturation current
     is: f64,
-    // ideality factor
+    // Ideality factor
     n: f64,
 }
 
@@ -580,14 +581,12 @@ struct Diode {
 }
 
 impl Diode {
-    fn new(m: &mut MNASystem, l0: usize, l1: usize, params: DiodeParameters ) -> Self {
+    fn new(m: &mut MNASystem, l0: usize, l1: usize, params: DiodeParameters) -> Self {
         let l2 = m.reserve();
         let l3 = m.reserve();
         let dyn_index0 = m.reserve_dynamic();
         let dyn_index1 = m.reserve_dynamic();
-        let mut pn = JunctionPN::new(params.is, params.n);
-        // initial condition has v=0
-        pn.linearize(0.0);
+        let pn = JunctionPN::new(params.is, params.n);
         Self {
             l0,
             l1,
@@ -603,8 +602,7 @@ impl Diode {
 
 impl Component for Diode {
     fn stamp(&self, m: &mut MNASystem) {
-        let (l0, l1, l2, l3) =
-            (self.l0, self.l1, self.l2, self.l3);
+        let (l0, l1, l2, l3) = (self.l0, self.l1, self.l2, self.l3);
 
         // Diode could be built with 3 extra nodes:
         //
@@ -667,8 +665,84 @@ impl Component for Diode {
     fn newton(&mut self, m: &mut MNASystem) -> bool {
         self.pn.newton(m.b[self.l2].lu)
     }
-
 }
+
+#[derive(Debug)]
+enum TransistorType {
+    NPN,
+    PNP,
+}
+
+#[derive(Debug)]
+struct BJTParameters {
+    // Forward beta
+    bf: f64,
+    // Reverse beta
+    br: f64,
+    // Base resistor in model
+    rb: f64,
+    // Emitter resistor in model
+    re: f64,
+    // Collector resistor in model
+    rc: f64,
+    // Reverse bias saturation current
+    is: f64,
+    // Ideality factor
+    n: f64,
+    transistor_type: TransistorType,
+}
+
+impl Default for BJTParameters {
+    fn default() -> Self {
+        // Default transistor approximates 2N3904
+        Self {
+            bf: 200.0,
+            br: 20.0,
+            rb: 5.8376,
+            re: 2.65711,
+            rc: 0.0001,
+            is: 6.734e-15,
+            n: 1.24,
+            transistor_type: TransistorType::NPN,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct BJT {
+    pin: [usize; 3],
+    l: [usize; 4],
+    dyn_pnc_ieq: usize,
+    dyn_pnc_geq: usize,
+    dyn_pne_ieq: usize,
+    dyn_pne_geq: usize,
+    pnc: JunctionPN,
+    pne: JunctionPN,
+    params: BJTParameters,
+}
+
+impl BJT {
+    fn new(m: &mut MNASystem, b: usize, c: usize, e: usize, params: BJTParameters) -> Self {
+        let af = params.bf / (1.0 + params.bf);
+        let ar = params.br / (1.0 + params.br);
+        let pne = JunctionPN::new(params.is / af, params.n);
+        let pnc = JunctionPN::new(params.is / ar, params.n);
+        Self {
+            pin: [b, c, e],
+            l: [m.reserve(), m.reserve(), m.reserve(), m.reserve()],
+            dyn_pnc_ieq: m.reserve_dynamic(),
+            dyn_pnc_geq: m.reserve_dynamic(),
+            dyn_pne_ieq: m.reserve_dynamic(),
+            dyn_pne_geq: m.reserve_dynamic(),
+            pnc,
+            pne,
+            params,
+        }
+    }
+}
+
+// let rsbc = params.rb + params.rc;
+// let rsbe = params.rb + params.re;
 
 #[cfg(test)]
 mod tests {
@@ -702,14 +776,14 @@ mod tests {
     #[test]
     fn test_pn() -> Result<(), String> {
         // Similar to 1N4148 (but just PN junction)
-        let mut pn = JunctionPN::new(/*is=*/35.0e-12, /*n=*/1.24);
+        let mut pn = JunctionPN::new(/*is=*/ 35.0e-12, /*n=*/ 1.24);
         // vcrit is point where current increases faster than voltage as voltage increases
-        assert!(approx_eq!(f64, pn.vcrit, 0.6542963597947701, ulps=100));
+        assert!(approx_eq!(f64, pn.vcrit, 0.6542963597947701, ulps = 100));
         // Check ieq for a couple voltages
         pn.newton(0.5);
-        assert!(approx_eq!(f64, pn.ieq, 0.002760783529589722, ulps=100));
+        assert!(approx_eq!(f64, pn.ieq, 0.002760783529589722, ulps = 100));
         pn.newton(0.4);
-        assert!(approx_eq!(f64, pn.ieq, 0.0000976127760265226, ulps=100));
+        assert!(approx_eq!(f64, pn.ieq, 0.0000976127760265226, ulps = 100));
         // 0.4 should just take 1 newton step (below vcrit)
         let mut done = pn.newton(0.4);
         assert!(done);
