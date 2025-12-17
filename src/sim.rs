@@ -667,7 +667,7 @@ impl Component for Diode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum TransistorType {
     NPN,
     PNP,
@@ -761,79 +761,74 @@ impl BJT {
 
 impl Component for BJT {
     fn stamp(&self, m: &mut MNASystem) {
-        // // The basic idea here is the same as with diodes
-        // // except we do it once for each junction.
-        // //
-        // // With the transfer currents sourced from the
-        // // diode currents, NPN then looks like this:
-        // //
-        // // 0 |  .  .  .  .  . 1-ar 1-af | vB
-        // // 1 |  .  .  .  .  .   -1  +af | vC
-        // // 2 |  .  .  .  .  .  +ar   -1 | vE
-        // // 3 |  .  .  . gc  .   -1    . | v:Qbc  = ic
-        // // 4 |  .  .  .  . ge    .   -1 | v:Qbe  = ie
-        // // 5 | -1 +1  . +1  . rsbc    . | i:Qbc
-        // // 6 | -1  . +1  . +1    . rsbe | i:Qbe
-        // //     ------------------------
-        // //      0  1  2  3  4    5    6
-        // //
-        // // For PNP version, we simply flip the junctions
-        // // by changing signs of (3,5),(5,3) and (4,6),(6,4).
-        // //
-        // // Also just like diodes, we have junction series
-        // // resistances, rather than terminal resistances.
-        // //
-        // // This works just as well, but should be kept
-        // // in mind when fitting particular transistors.
-        // //
-        // // diode currents to external base
-        // m.stampStatic(1-ar, nets[0], nets[5], "1-ar");
-        // m.stampStatic(1-af, nets[0], nets[6], "1-af");
+        // The basic idea here is the same as with diodes
+        // except we do it once for each junction.
+        //
+        // With the transfer currents sourced from the
+        // diode currents, NPN then looks like this:
+        //
+        // 0 |  .  .  .  .  . 1-ar 1-af | vB
+        // 1 |  .  .  .  .  .   -1  +af | vC
+        // 2 |  .  .  .  .  .  +ar   -1 | vE
+        // 3 |  .  .  . gc  .   -1    . | v:Qbc  = ic
+        // 4 |  .  .  .  . ge    .   -1 | v:Qbe  = ie
+        // 5 | -1 +1  . +1  . rsbc    . | i:Qbc
+        // 6 | -1  . +1  . +1    . rsbe | i:Qbe
+        //     ------------------------
+        //      0  1  2  3  4    5    6
+        //
+        // For PNP version, we simply flip the junctions
+        // by changing signs of (3,5),(5,3) and (4,6),(6,4).
+        //
+        // Also just like diodes, we have junction series
+        // resistances, rather than terminal resistances.
+        //
+        // This works just as well, but should be kept
+        // in mind when fitting particular transistors.
+        //
+        // Cheat sheet:
+        // nets[0] pin[0]
+        // nets[1] pin[1]
+        // nets[2] pin[2]
+        // nets[3] l[0]
+        // nets[4] l[1]
+        // nets[5] l[2]
+        // nets[6] l[3]
 
-        // // diode currents to external collector and emitter
-        // m.stampStatic(-1, nets[1], nets[5], "-1");
-        // m.stampStatic(-1, nets[2], nets[6], "-1");
+        // diode currents to external base
+        m.stamp_static(1.0 - self.params.ar(), self.pin[0], self.l[2], "1-ar");
+        m.stamp_static(1.0 - self.params.af(), self.pin[0], self.l[3], "1-ar");
+        // diode currents to external collector and emitter
+        m.stamp_static(-1.0, self.pin[1], self.l[2], "-1");
+        m.stamp_static(-1.0, self.pin[2], self.l[3], "-1");
+        // series resistances
+        m.stamp_static(self.params.rsbc(), self.l[2], self.l[2], "rsbc");
+        m.stamp_static(self.params.rsbe(), self.l[3], self.l[3], "rsbe");
+        // current - junction connections
+        // for the PNP case we flip the signs of these
+        // to flip the diode junctions wrt. the above
+        if self.params.transistor_type == TransistorType::PNP {
+            m.stamp_static(-1.0, self.l[2], self.l[0], "-1");
+            m.stamp_static(1.0, self.l[0], self.l[2], "+1");
+            m.stamp_static(-1.0, self.l[3], self.l[1], "-1");
+            m.stamp_static(1.0, self.l[1], self.l[3], "+1");
+        } else {
+            m.stamp_static(1.0, self.l[2], self.l[0], "+1");
+            m.stamp_static(-1.0, self.l[0], self.l[2], "-1");
+            m.stamp_static(1.0, self.l[3], self.l[1], "+1");
+            m.stamp_static(-1.0, self.l[1], self.l[3], "-1");
+        }
+        // external voltages to collector current
+        m.stamp_static(-1.0, self.l[2], self.pin[0], "-1");
+        m.stamp_static(1.0, self.l[2], self.pin[1], "+1");
+        // external voltages to emitter current
+        m.stamp_static(-1.0, self.l[3], self.pin[0], "-1");
+        m.stamp_static(1.0, self.l[3], self.pin[2], "+1");
+        // source transfer currents to external pins
+        m.stamp_static(self.params.ar(), self.pin[2], self.l[2], "+ar");
+        m.stamp_static(self.params.af(), self.pin[1], self.l[3], "+af");
 
-        // // series resistances
-        // m.stampStatic(rsbc, nets[5], nets[5], "rsbc");
-        // m.stampStatic(rsbe, nets[6], nets[6], "rsbe");
-
-        // // current - junction connections
-        // // for the PNP case we flip the signs of these
-        // // to flip the diode junctions wrt. the above
-        // if(pnp)
-        // {
-        //     m.stampStatic(-1, nets[5], nets[3], "-1");
-        //     m.stampStatic(+1, nets[3], nets[5], "+1");
-
-        //     m.stampStatic(-1, nets[6], nets[4], "-1");
-        //     m.stampStatic(+1, nets[4], nets[6], "+1");
-
-        // }
-        // else
-        // {
-        //     m.stampStatic(+1, nets[5], nets[3], "+1");
-        //     m.stampStatic(-1, nets[3], nets[5], "-1");
-
-        //     m.stampStatic(+1, nets[6], nets[4], "+1");
-        //     m.stampStatic(-1, nets[4], nets[6], "-1");
-        // }
-
-        // // external voltages to collector current
-        // m.stampStatic(-1, nets[5], nets[0], "-1");
-        // m.stampStatic(+1, nets[5], nets[1], "+1");
-
-        // // external voltages to emitter current
-        // m.stampStatic(-1, nets[6], nets[0], "-1");
-        // m.stampStatic(+1, nets[6], nets[2], "+1");
-
-        // // source transfer currents to external pins
-        // m.stampStatic(+ar, nets[2], nets[5], "+ar");
-        // m.stampStatic(+af, nets[1], nets[6], "+af");
-
-        // char buf[16];
-
-        // // dynamic variables
+        // dynamic variables
         // m.A[nets[3]][nets[3]].gdyn.push_back(&pnC.geq);
         // m.A[nets[3]][nets[3]].txt = "gm:Qbc";
         // m.b[nets[3]].gdyn.push_back(&pnC.ieq);
@@ -863,7 +858,6 @@ impl Component for BJT {
         // m.nodes[nets[6]].name = buf;
         // m.nodes[nets[6]].type = MNANodeInfo::tCurrent;
         // m.nodes[nets[6]].scale = 1 - af;
-
     }
     fn newton(&mut self, m: &mut MNASystem) -> bool {
         self.pnc.newton(m.b[self.l[0]].lu) && self.pne.newton(m.b[self.l[1]].lu)
