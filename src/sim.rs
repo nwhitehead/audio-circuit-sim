@@ -853,13 +853,6 @@ impl Component for BJT {
         // source transfer currents to external pins
         m.stamp_static(self.params.ar(), self.pin[2], self.l[2], "+ar");
         m.stamp_static(self.params.af(), self.pin[1], self.l[3], "+af");
-
-        // m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("gm:D"));
-        // m.add_dynamic_b(l2, self.dyn_index1, &format!("i0:D:{},{}", l0, l1));
-        // m.nodes[l2].name = format!("v:D:{},{}", l0, l1);
-        // m.nodes[l3].name = format!("i:D:{},{}", l0, l1);
-        // m.nodes[l3].info_type = InfoType::CURRENT;
-
         // dynamic variables
         m.add_dynamic_a(self.l[0], self.l[0], self.dyn_pnc_geq, &format!("gm:Qbc"));
         m.add_dynamic_b(
@@ -873,32 +866,30 @@ impl Component for BJT {
             self.dyn_pne_ieq,
             &format!("i0:Q:{},{},{}:eb", self.pin[0], self.pin[1], self.pin[2]),
         );
-        self.update_dynamic(m);
-
-        m.nodes[self.l[1]] = MNANodeInfo::new_voltage_with_name(&format!(
+        // voltage and current infos
+        m.nodes[self.l[0]] = MNANodeInfo::new_voltage_with_name(&format!(
             "v:Q:{},{},{}:{}",
             self.pin[0],
             self.pin[1],
             self.pin[2],
             if pnp { "cb" } else { "bc" }
         ));
-        // sprintf(buf, "v:Q:%d,%d,%d:%s",
-        //     pinLoc[0], pinLoc[1], pinLoc[2], pnp ? "cb" : "bc");
-        // m.nodes[nets[3]].name = buf;
-
-        // sprintf(buf, "v:Q:%d,%d,%d:%s",
-        //     pinLoc[0], pinLoc[1], pinLoc[2], pnp ? "eb" : "be");
-        // m.nodes[nets[4]].name = buf;
-
-        // sprintf(buf, "i:Q:%d,%d,%d:bc", pinLoc[0], pinLoc[1], pinLoc[2]);
-        // m.nodes[nets[5]].name = buf;
-        // m.nodes[nets[5]].type = MNANodeInfo::tCurrent;
-        // m.nodes[nets[5]].scale = 1 - ar;
-
-        // sprintf(buf, "i:Q:%d,%d,%d:be", pinLoc[0], pinLoc[1], pinLoc[2]);
-        // m.nodes[nets[6]].name = buf;
-        // m.nodes[nets[6]].type = MNANodeInfo::tCurrent;
-        // m.nodes[nets[6]].scale = 1 - af;
+        m.nodes[self.l[1]] = MNANodeInfo::new_voltage_with_name(&format!(
+            "v:Q:{},{},{}:{}",
+            self.pin[0],
+            self.pin[1],
+            self.pin[2],
+            if pnp { "eb" } else { "be" }
+        ));
+        m.nodes[self.l[2]] = MNANodeInfo::new_current_with_scale(
+            &format!("i:Q:{},{},{}:bc", self.pin[0], self.pin[1], self.pin[2],),
+            1.0 - self.params.ar(),
+        );
+        m.nodes[self.l[3]] = MNANodeInfo::new_current_with_scale(
+            &format!("i:Q:{},{},{}:be", self.pin[0], self.pin[1], self.pin[2],),
+            1.0 - self.params.af(),
+        );
+        self.update_dynamic(m);
     }
 
     fn update_dynamic(&self, m: &mut MNASystem) {
