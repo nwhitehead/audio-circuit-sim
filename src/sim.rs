@@ -104,6 +104,34 @@ impl MNANodeInfo {
             name: format!("v{}", n),
         }
     }
+    fn new_voltage_with_name(name: &str) -> Self {
+        Self {
+            info_type: InfoType::VOLTAGE,
+            scale: 1.0,
+            name: name.into(),
+        }
+    }
+    fn new_voltage_with_name_and_scale(name: &str, scale: f64) -> Self {
+        Self {
+            info_type: InfoType::VOLTAGE,
+            scale,
+            name: name.into(),
+        }
+    }
+    fn new_current(name: &str) -> Self {
+        Self {
+            info_type: InfoType::CURRENT,
+            scale: 1.0,
+            name: name.into(),
+        }
+    }
+    fn new_current_with_scale(name: &str, scale: f64) -> Self {
+        Self {
+            info_type: InfoType::CURRENT,
+            scale,
+            name: name.into(),
+        }
+    }
 }
 // Store matrix as a vector of rows for easy pivots
 type MNAVector = Vec<MNACell>;
@@ -332,8 +360,8 @@ impl Component for Capacitor {
 
         // this isn't quite right as state stores 2*c*v - i/t
         // however, we'll fix this in updateFull() for display
-        m.nodes[l2].name = String::from(format!("v:C:{},{}", l0, l1));
-        m.nodes[l2].scale = 1. / c;
+        m.nodes[l2] =
+            MNANodeInfo::new_voltage_with_name_and_scale(&format!("v:C:{},{}", l0, l1), 1.0 / c);
         self.update_dynamic(m);
     }
 
@@ -395,8 +423,7 @@ impl Component for VoltageSource {
         m.b[l2].g = v;
         m.b[l2].txt = String::from(format!("{:.}V", v));
 
-        m.nodes[l2].name = format!("i:V({:.}:{},{})", v, l0, l1);
-        m.nodes[l2].info_type = InfoType::CURRENT;
+        m.nodes[l2] = MNANodeInfo::new_current(&format!("i:V({:.}:{},{})", v, l0, l1));
     }
 }
 
@@ -424,7 +451,7 @@ impl Component for VoltageProbe {
         m.stamp_static(1., l2, l0, "+1");
         m.stamp_static(-1., l2, l1, "-1");
         m.stamp_static(-1., l2, l2, "-1");
-        m.nodes[l2].name = "v:probe".into();
+        m.nodes[l2] = MNANodeInfo::new_voltage_with_name(&"v:probe");
     }
 }
 
@@ -470,8 +497,7 @@ impl Component for VoltageFunction {
 
         m.add_dynamic_b(l2, dyn_index, &format!("Vfn:{},{}", l0, l1));
 
-        m.nodes[l2].name = format!("i:Vfn:{},{}", l0, l1);
-        m.nodes[l2].info_type = InfoType::CURRENT;
+        m.nodes[l2] = MNANodeInfo::new_current(&format!("i:Vfn:{},{}", l0, l1));
         self.update_dynamic(m);
     }
 
@@ -651,9 +677,8 @@ impl Component for Diode {
         m.stamp_static(self.rs, l3, l3, "rs:pn");
         m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("gm:D"));
         m.add_dynamic_b(l2, self.dyn_index1, &format!("i0:D:{},{}", l0, l1));
-        m.nodes[l2].name = format!("v:D:{},{}", l0, l1);
-        m.nodes[l3].name = format!("i:D:{},{}", l0, l1);
-        m.nodes[l3].info_type = InfoType::CURRENT;
+        m.nodes[l2] = MNANodeInfo::new_voltage_with_name(&format!("v:D:{},{}", l0, l1));
+        m.nodes[l3] = MNANodeInfo::new_current(&format!("i:D:{},{}", l0, l1));
         self.update_dynamic(m);
     }
 
@@ -795,6 +820,7 @@ impl Component for BJT {
         // nets[5] l[2]
         // nets[6] l[3]
 
+        let pnp = self.params.transistor_type == TransistorType::PNP;
         // diode currents to external base
         m.stamp_static(1.0 - self.params.ar(), self.pin[0], self.l[2], "1-ar");
         m.stamp_static(1.0 - self.params.af(), self.pin[0], self.l[3], "1-ar");
@@ -807,7 +833,7 @@ impl Component for BJT {
         // current - junction connections
         // for the PNP case we flip the signs of these
         // to flip the diode junctions wrt. the above
-        if self.params.transistor_type == TransistorType::PNP {
+        if pnp {
             m.stamp_static(-1.0, self.l[2], self.l[0], "-1");
             m.stamp_static(1.0, self.l[0], self.l[2], "+1");
             m.stamp_static(-1.0, self.l[3], self.l[1], "-1");
@@ -828,19 +854,34 @@ impl Component for BJT {
         m.stamp_static(self.params.ar(), self.pin[2], self.l[2], "+ar");
         m.stamp_static(self.params.af(), self.pin[1], self.l[3], "+af");
 
+        // m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("gm:D"));
+        // m.add_dynamic_b(l2, self.dyn_index1, &format!("i0:D:{},{}", l0, l1));
+        // m.nodes[l2].name = format!("v:D:{},{}", l0, l1);
+        // m.nodes[l3].name = format!("i:D:{},{}", l0, l1);
+        // m.nodes[l3].info_type = InfoType::CURRENT;
+
         // dynamic variables
-        // m.A[nets[3]][nets[3]].gdyn.push_back(&pnC.geq);
-        // m.A[nets[3]][nets[3]].txt = "gm:Qbc";
-        // m.b[nets[3]].gdyn.push_back(&pnC.ieq);
-        // sprintf(buf, "i0:Q:%d,%d,%d:cb", pinLoc[0], pinLoc[1], pinLoc[2]);
-        // m.b[nets[3]].txt = buf;
+        m.add_dynamic_a(self.l[0], self.l[0], self.dyn_pnc_geq, &format!("gm:Qbc"));
+        m.add_dynamic_b(
+            self.l[0],
+            self.dyn_pnc_ieq,
+            &format!("i0:Q:{},{},{}:cb", self.pin[0], self.pin[1], self.pin[2]),
+        );
+        m.add_dynamic_a(self.l[1], self.l[1], self.dyn_pne_geq, &format!("gm:Qbe"));
+        m.add_dynamic_b(
+            self.l[1],
+            self.dyn_pne_ieq,
+            &format!("i0:Q:{},{},{}:eb", self.pin[0], self.pin[1], self.pin[2]),
+        );
+        self.update_dynamic(m);
 
-        // m.A[nets[4]][nets[4]].gdyn.push_back(&pnE.geq);
-        // m.A[nets[4]][nets[4]].txt = "gm:Qbe";
-        // m.b[nets[4]].gdyn.push_back(&pnE.ieq);
-        // sprintf(buf, "i0:Q:%d,%d,%d:eb", pinLoc[0], pinLoc[1], pinLoc[2]);
-        // m.b[nets[4]].txt = buf;
-
+        m.nodes[self.l[1]] = MNANodeInfo::new_voltage_with_name(&format!(
+            "v:Q:{},{},{}:{}",
+            self.pin[0],
+            self.pin[1],
+            self.pin[2],
+            if pnp { "cb" } else { "bc" }
+        ));
         // sprintf(buf, "v:Q:%d,%d,%d:%s",
         //     pinLoc[0], pinLoc[1], pinLoc[2], pnp ? "cb" : "bc");
         // m.nodes[nets[3]].name = buf;
@@ -859,6 +900,14 @@ impl Component for BJT {
         // m.nodes[nets[6]].type = MNANodeInfo::tCurrent;
         // m.nodes[nets[6]].scale = 1 - af;
     }
+
+    fn update_dynamic(&self, m: &mut MNASystem) {
+        m.set_dynamic(self.dyn_pnc_ieq, self.pnc.ieq);
+        m.set_dynamic(self.dyn_pnc_geq, self.pnc.geq);
+        m.set_dynamic(self.dyn_pne_ieq, self.pne.ieq);
+        m.set_dynamic(self.dyn_pne_geq, self.pne.geq);
+    }
+
     fn newton(&mut self, m: &mut MNASystem) -> bool {
         self.pnc.newton(m.b[self.l[0]].lu) && self.pne.newton(m.b[self.l[1]].lu)
     }
