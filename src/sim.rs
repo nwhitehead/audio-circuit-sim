@@ -904,6 +904,10 @@ impl Component for BJT {
     }
 }
 
+struct NetList {
+    components: Vec<Box<dyn Component>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
