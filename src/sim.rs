@@ -904,8 +904,26 @@ impl Component for BJT {
     }
 }
 
+type ComponentList = Vec<Box<dyn Component>>;
+
 struct NetList {
-    components: Vec<Box<dyn Component>>,
+    components: ComponentList,
+    time_step: f64,
+    nets: usize,
+    states: usize,
+    system: MNASystem,
+}
+
+impl NetList {
+    fn new(nodes: usize) -> Self {
+        Self {
+            components: vec![],
+            time_step: 0.0,
+            nets: nodes,
+            states: 0,
+            system: MNASystem::default(),
+        }
+    }
 }
 
 #[cfg(test)]
