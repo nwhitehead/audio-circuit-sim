@@ -217,7 +217,11 @@ impl MNASystem {
     }
 }
 
+#[allow(unused)]
 trait Component {
+    // reserve all extra spots needed for simulation
+    fn reserve(&mut self, m: &mut MNASystem) {}
+
     // stamp constants into the matrix
     fn stamp(&self, m: &mut MNASystem) {}
 
@@ -238,7 +242,7 @@ trait Component {
     }
 
     // time-step change, fix their state-variables (used for caps)
-    fn scale_time(&mut self, m: &mut MNASystem, t_old_per_new: f64) {}
+    fn scale_time(&mut self, m: &mut MNASystem, _t_old_per_new: f64) {}
 }
 
 const UNIT_VALUE_OFFSET: i32 = 4;
@@ -272,7 +276,7 @@ struct Resistor {
 }
 
 impl Resistor {
-    fn new(m: &mut MNASystem, r: f64, l0: usize, l1: usize) -> Self {
+    fn new(r: f64, l0: usize, l1: usize) -> Self {
         Self { r, l0, l1 }
     }
 }
@@ -290,33 +294,42 @@ impl Component for Resistor {
 }
 
 #[derive(Debug)]
+struct CapacitorReserved {
+    l2: usize,
+    dyn_index: usize,
+}
+
+#[derive(Debug)]
 struct Capacitor {
     c: f64,
     l0: usize,
     l1: usize,
-    l2: usize,
     state_var: f64,
-    dyn_index: usize,
     voltage: f64,
+    reserved: Option<CapacitorReserved>,
 }
 
 impl Capacitor {
-    fn new(m: &mut MNASystem, c: f64, l0: usize, l1: usize) -> Self {
-        let l2 = m.reserve();
-        let dyn_index = m.reserve_dynamic();
+    fn new(c: f64, l0: usize, l1: usize) -> Self {
         Self {
             c,
             l0,
             l1,
-            l2,
             state_var: 0.,
             voltage: 0.,
-            dyn_index,
+            reserved: None,
         }
     }
 }
 
 impl Component for Capacitor {
+    fn reserve(&mut self, m: &mut MNASystem) {
+        self.reserved = Some(CapacitorReserved {
+            l2: m.reserve(),
+            dyn_index: m.reserve_dynamic(),
+        });
+    }
+
     fn stamp(&self, m: &mut MNASystem) {
         // we can use a trick here, to get the capacitor to
         // work on it's own line with direct trapezoidal:
@@ -343,7 +356,9 @@ impl Component for Capacitor {
         //
         // trapezoidal needs another factor of two for the g
         // since c*(v1 - v0) = (i1 + i0)/(2*t), where t = 1/T
-        let (c, l0, l1, l2, dyn_index) = (self.c, self.l0, self.l1, self.l2, self.dyn_index);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        let (c, l0, l1, l2, dyn_index) =
+            (self.c, self.l0, self.l1, reserved.l2, reserved.dyn_index);
         let txt = format_unit_value(c, "F");
         let g = 2.0 * c;
         m.stamp_timed(1., l0, l2, "+t");
@@ -366,18 +381,20 @@ impl Component for Capacitor {
     }
 
     fn update_dynamic(&self, m: &mut MNASystem) {
-        m.set_dynamic(self.dyn_index, self.state_var);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        m.set_dynamic(reserved.dyn_index, self.state_var);
     }
 
     fn update(&mut self, m: &mut MNASystem) {
-        self.state_var = m.b[self.l2].lu;
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        self.state_var = m.b[reserved.l2].lu;
 
         // solve legit voltage from the pins
         self.voltage = m.b[self.l0].lu - m.b[self.l1].lu;
 
         // then we can store this for display here
         // since this value won't be used at this point
-        m.b[self.l2].lu = self.c * self.voltage;
+        m.b[reserved.l2].lu = self.c * self.voltage;
 
         // Update dynamic variable since we changed state_var
         self.update_dynamic(m);
@@ -398,23 +415,37 @@ impl Component for Capacitor {
 }
 
 #[derive(Debug)]
+struct VoltageSourceReserved {
+    l2: usize,
+}
+
+#[derive(Debug)]
 struct VoltageSource {
     v: f64,
     l0: usize,
     l1: usize,
-    l2: usize,
+    reserved: Option<VoltageSourceReserved>,
 }
 
 impl VoltageSource {
-    fn new(m: &mut MNASystem, v: f64, l0: usize, l1: usize) -> Self {
-        let l2 = m.reserve();
-        Self { v, l0, l1, l2 }
+    fn new(v: f64, l0: usize, l1: usize) -> Self {
+        Self {
+            v,
+            l0,
+            l1,
+            reserved: None,
+        }
     }
 }
 
 impl Component for VoltageSource {
+    fn reserve(&mut self, m: &mut MNASystem) {
+        self.reserved = Some(VoltageSourceReserved { l2: m.reserve() });
+    }
+
     fn stamp(&self, m: &mut MNASystem) {
-        let (v, l0, l1, l2) = (self.v, self.l0, self.l1, self.l2);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        let (v, l0, l1, l2) = (self.v, self.l0, self.l1, reserved.l2);
         m.stamp_static(-1., l0, l2, &"-1");
         m.stamp_static(1., l1, l2, &"+1");
         m.stamp_static(1., l2, l0, &"+1");
@@ -428,24 +459,36 @@ impl Component for VoltageSource {
 }
 
 #[derive(Debug)]
+struct VoltageProbeReserved {
+    l2: usize,
+}
+
+#[derive(Debug)]
 struct VoltageProbe {
     // probe a differential voltage
     // also forces this voltage to actually get solved :)
     l0: usize,
     l1: usize,
-    l2: usize,
+    reserved: Option<VoltageProbeReserved>,
 }
 
 impl VoltageProbe {
-    fn new(m: &mut MNASystem, l0: usize, l1: usize) -> Self {
-        let l2 = m.reserve();
-        Self { l0, l1, l2 }
+    fn new(l0: usize, l1: usize) -> Self {
+        Self {
+            l0,
+            l1,
+            reserved: None,
+        }
     }
 }
 
 impl Component for VoltageProbe {
+    fn reserve(&mut self, m: &mut MNASystem) {
+        self.reserved = Some(VoltageProbeReserved { l2: m.reserve() });
+    }
     fn stamp(&self, m: &mut MNASystem) {
-        let (l0, l1, l2) = (self.l0, self.l1, self.l2);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        let (l0, l1, l2) = (self.l0, self.l1, reserved.l2);
 
         // vp + vn - vd = 0     so      vp = vd - vn
         m.stamp_static(1., l2, l0, "+1");
@@ -456,37 +499,51 @@ impl Component for VoltageProbe {
 }
 
 #[derive(Debug)]
+struct VoltageFunctionReserved {
+    dyn_index: usize,
+    l2: usize,
+}
+
+#[derive(Debug)]
 struct VoltageFunction {
     // probe a differential voltage
     // also forces this voltage to actually get solved :)
     v: f64,
     f: fn(f64) -> f64,
-    dyn_index: usize,
     l0: usize,
     l1: usize,
-    l2: usize,
+    reserved: Option<VoltageFunctionReserved>,
 }
 
 impl VoltageFunction {
-    fn new(m: &mut MNASystem, f: fn(f64) -> f64, l0: usize, l1: usize) -> Self {
-        let l2 = m.reserve();
-        let dyn_index = m.reserve_dynamic();
+    fn new(f: fn(f64) -> f64, l0: usize, l1: usize) -> Self {
         let v = f(0.0);
         Self {
             v,
             f,
-            dyn_index,
             l0,
             l1,
-            l2,
+            reserved: None,
         }
     }
 }
 
 impl Component for VoltageFunction {
+    fn reserve(&mut self, m: &mut MNASystem) {
+        self.reserved = Some(VoltageFunctionReserved {
+            l2: m.reserve(),
+            dyn_index: m.reserve_dynamic(),
+        });
+    }
+
     fn stamp(&self, m: &mut MNASystem) {
-        let (v, f, dyn_index, l0, l1, l2) =
-            (self.v, self.f, self.dyn_index, self.l0, self.l1, self.l2);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        let (dyn_index, l0, l1, l2) = (
+            reserved.dyn_index,
+            self.l0,
+            self.l1,
+            reserved.l2,
+        );
 
         // this is identical to voltage source
         // except voltage is dynanic
@@ -502,7 +559,8 @@ impl Component for VoltageFunction {
     }
 
     fn update_dynamic(&self, m: &mut MNASystem) {
-        m.set_dynamic(self.dyn_index, self.v);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        m.set_dynamic(reserved.dyn_index, self.v);
     }
     fn update(&mut self, m: &mut MNASystem) {
         self.v = (self.f)(m.time);
@@ -595,40 +653,48 @@ impl Default for DiodeParameters {
 }
 
 #[derive(Debug)]
-struct Diode {
-    l0: usize,
-    l1: usize,
+struct DiodeReserved {
     l2: usize,
     l3: usize,
     dyn_index0: usize,
     dyn_index1: usize,
+}
+
+#[derive(Debug)]
+struct Diode {
+    l0: usize,
+    l1: usize,
     pn: JunctionPN,
     rs: f64,
+    reserved: Option<DiodeReserved>,
 }
 
 impl Diode {
-    fn new(m: &mut MNASystem, l0: usize, l1: usize, params: DiodeParameters) -> Self {
-        let l2 = m.reserve();
-        let l3 = m.reserve();
-        let dyn_index0 = m.reserve_dynamic();
-        let dyn_index1 = m.reserve_dynamic();
+    fn new(l0: usize, l1: usize, params: DiodeParameters) -> Self {
         let pn = JunctionPN::new(params.is, params.n);
         Self {
             l0,
             l1,
-            l2,
-            l3,
-            dyn_index0,
-            dyn_index1,
             rs: params.rs,
             pn,
+            reserved: None,
         }
     }
 }
 
 impl Component for Diode {
+    fn reserve(&mut self, m: &mut MNASystem) {
+        self.reserved = Some(DiodeReserved {
+            l2: m.reserve(),
+            l3: m.reserve(),
+            dyn_index0: m.reserve_dynamic(),
+            dyn_index1: m.reserve_dynamic(),
+        });
+    }
+
     fn stamp(&self, m: &mut MNASystem) {
-        let (l0, l1, l2, l3) = (self.l0, self.l1, self.l2, self.l3);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        let (l0, l1, l2, l3) = (self.l0, self.l1, reserved.l2, reserved.l3);
 
         // Diode could be built with 3 extra nodes:
         //
@@ -675,20 +741,22 @@ impl Component for Diode {
         m.stamp_static(-1.0, l1, l3, "-1");
         m.stamp_static(-1.0, l2, l3, "-1");
         m.stamp_static(self.rs, l3, l3, "rs:pn");
-        m.add_dynamic_a(l2, l2, self.dyn_index0, &format!("gm:D"));
-        m.add_dynamic_b(l2, self.dyn_index1, &format!("i0:D:{},{}", l0, l1));
+        m.add_dynamic_a(l2, l2, reserved.dyn_index0, &format!("gm:D"));
+        m.add_dynamic_b(l2, reserved.dyn_index1, &format!("i0:D:{},{}", l0, l1));
         m.nodes[l2] = MNANodeInfo::new_voltage_with_name(&format!("v:D:{},{}", l0, l1));
         m.nodes[l3] = MNANodeInfo::new_current(&format!("i:D:{},{}", l0, l1));
         self.update_dynamic(m);
     }
 
     fn update_dynamic(&self, m: &mut MNASystem) {
-        m.set_dynamic(self.dyn_index0, self.pn.geq);
-        m.set_dynamic(self.dyn_index1, self.pn.ieq);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        m.set_dynamic(reserved.dyn_index0, self.pn.geq);
+        m.set_dynamic(reserved.dyn_index1, self.pn.ieq);
     }
 
     fn newton(&mut self, m: &mut MNASystem) -> bool {
-        self.pn.newton(m.b[self.l2].lu)
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        self.pn.newton(m.b[reserved.l2].lu)
     }
 }
 
@@ -754,37 +822,48 @@ impl Default for BJTParameters {
 }
 
 #[derive(Debug)]
-struct BJT {
-    pin: [usize; 3],
+struct BJTReserved {
     l: [usize; 4],
     dyn_pnc_ieq: usize,
     dyn_pnc_geq: usize,
     dyn_pne_ieq: usize,
     dyn_pne_geq: usize,
+}
+
+#[derive(Debug)]
+struct BJT {
+    pin: [usize; 3],
     pnc: JunctionPN,
     pne: JunctionPN,
     params: BJTParameters,
+    reserved: Option<BJTReserved>,
 }
 
 impl BJT {
-    fn new(m: &mut MNASystem, b: usize, c: usize, e: usize, params: BJTParameters) -> Self {
+    fn new(b: usize, c: usize, e: usize, params: BJTParameters) -> Self {
         let pne = JunctionPN::new(params.is / params.af(), params.n);
         let pnc = JunctionPN::new(params.is / params.ar(), params.n);
         Self {
             pin: [b, c, e],
-            l: [m.reserve(), m.reserve(), m.reserve(), m.reserve()],
-            dyn_pnc_ieq: m.reserve_dynamic(),
-            dyn_pnc_geq: m.reserve_dynamic(),
-            dyn_pne_ieq: m.reserve_dynamic(),
-            dyn_pne_geq: m.reserve_dynamic(),
             pnc,
             pne,
             params,
+            reserved: None,
         }
     }
 }
 
 impl Component for BJT {
+    fn reserve(&mut self, m: &mut MNASystem) {
+        self.reserved = Some(BJTReserved {
+            l: [m.reserve(), m.reserve(), m.reserve(), m.reserve()],
+            dyn_pnc_ieq: m.reserve_dynamic(),
+            dyn_pnc_geq: m.reserve_dynamic(),
+            dyn_pne_ieq: m.reserve_dynamic(),
+            dyn_pne_geq: m.reserve_dynamic(),
+        });
+    }
+
     fn stamp(&self, m: &mut MNASystem) {
         // The basic idea here is the same as with diodes
         // except we do it once for each junction.
@@ -819,88 +898,95 @@ impl Component for BJT {
         // nets[4] l[1]
         // nets[5] l[2]
         // nets[6] l[3]
-
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        let (pin, l, params) = (self.pin, reserved.l, &self.params);
+        let dyn_pnc_ieq = reserved.dyn_pnc_ieq;
+        let dyn_pnc_geq = reserved.dyn_pnc_geq;
+        let dyn_pne_ieq = reserved.dyn_pne_ieq;
+        let dyn_pne_geq = reserved.dyn_pne_geq;
         let pnp = self.params.transistor_type == TransistorType::PNP;
         // diode currents to external base
-        m.stamp_static(1.0 - self.params.ar(), self.pin[0], self.l[2], "1-ar");
-        m.stamp_static(1.0 - self.params.af(), self.pin[0], self.l[3], "1-ar");
+        m.stamp_static(1.0 - params.ar(), pin[0], l[2], "1-ar");
+        m.stamp_static(1.0 - params.af(), pin[0], l[3], "1-ar");
         // diode currents to external collector and emitter
-        m.stamp_static(-1.0, self.pin[1], self.l[2], "-1");
-        m.stamp_static(-1.0, self.pin[2], self.l[3], "-1");
+        m.stamp_static(-1.0, pin[1], l[2], "-1");
+        m.stamp_static(-1.0, pin[2], l[3], "-1");
         // series resistances
-        m.stamp_static(self.params.rsbc(), self.l[2], self.l[2], "rsbc");
-        m.stamp_static(self.params.rsbe(), self.l[3], self.l[3], "rsbe");
+        m.stamp_static(params.rsbc(), l[2], l[2], "rsbc");
+        m.stamp_static(params.rsbe(), l[3], l[3], "rsbe");
         // current - junction connections
         // for the PNP case we flip the signs of these
         // to flip the diode junctions wrt. the above
         if pnp {
-            m.stamp_static(-1.0, self.l[2], self.l[0], "-1");
-            m.stamp_static(1.0, self.l[0], self.l[2], "+1");
-            m.stamp_static(-1.0, self.l[3], self.l[1], "-1");
-            m.stamp_static(1.0, self.l[1], self.l[3], "+1");
+            m.stamp_static(-1.0, l[2], l[0], "-1");
+            m.stamp_static(1.0, l[0], l[2], "+1");
+            m.stamp_static(-1.0, l[3], l[1], "-1");
+            m.stamp_static(1.0, l[1], l[3], "+1");
         } else {
-            m.stamp_static(1.0, self.l[2], self.l[0], "+1");
-            m.stamp_static(-1.0, self.l[0], self.l[2], "-1");
-            m.stamp_static(1.0, self.l[3], self.l[1], "+1");
-            m.stamp_static(-1.0, self.l[1], self.l[3], "-1");
+            m.stamp_static(1.0, l[2], l[0], "+1");
+            m.stamp_static(-1.0, l[0], l[2], "-1");
+            m.stamp_static(1.0, l[3], l[1], "+1");
+            m.stamp_static(-1.0, l[1], l[3], "-1");
         }
         // external voltages to collector current
-        m.stamp_static(-1.0, self.l[2], self.pin[0], "-1");
-        m.stamp_static(1.0, self.l[2], self.pin[1], "+1");
+        m.stamp_static(-1.0, l[2], pin[0], "-1");
+        m.stamp_static(1.0, l[2], pin[1], "+1");
         // external voltages to emitter current
-        m.stamp_static(-1.0, self.l[3], self.pin[0], "-1");
-        m.stamp_static(1.0, self.l[3], self.pin[2], "+1");
+        m.stamp_static(-1.0, l[3], pin[0], "-1");
+        m.stamp_static(1.0, l[3], pin[2], "+1");
         // source transfer currents to external pins
-        m.stamp_static(self.params.ar(), self.pin[2], self.l[2], "+ar");
-        m.stamp_static(self.params.af(), self.pin[1], self.l[3], "+af");
+        m.stamp_static(params.ar(), pin[2], l[2], "+ar");
+        m.stamp_static(params.af(), pin[1], l[3], "+af");
         // dynamic variables
-        m.add_dynamic_a(self.l[0], self.l[0], self.dyn_pnc_geq, &format!("gm:Qbc"));
+        m.add_dynamic_a(l[0], l[0], dyn_pnc_geq, &format!("gm:Qbc"));
         m.add_dynamic_b(
-            self.l[0],
-            self.dyn_pnc_ieq,
-            &format!("i0:Q:{},{},{}:cb", self.pin[0], self.pin[1], self.pin[2]),
+            l[0],
+            dyn_pnc_ieq,
+            &format!("i0:Q:{},{},{}:cb", pin[0], pin[1], pin[2]),
         );
-        m.add_dynamic_a(self.l[1], self.l[1], self.dyn_pne_geq, &format!("gm:Qbe"));
+        m.add_dynamic_a(l[1], l[1], dyn_pne_geq, &format!("gm:Qbe"));
         m.add_dynamic_b(
-            self.l[1],
-            self.dyn_pne_ieq,
-            &format!("i0:Q:{},{},{}:eb", self.pin[0], self.pin[1], self.pin[2]),
+            l[1],
+            dyn_pne_ieq,
+            &format!("i0:Q:{},{},{}:eb", pin[0], pin[1], pin[2]),
         );
         // voltage and current infos
-        m.nodes[self.l[0]] = MNANodeInfo::new_voltage_with_name(&format!(
+        m.nodes[l[0]] = MNANodeInfo::new_voltage_with_name(&format!(
             "v:Q:{},{},{}:{}",
-            self.pin[0],
-            self.pin[1],
-            self.pin[2],
+            pin[0],
+            pin[1],
+            pin[2],
             if pnp { "cb" } else { "bc" }
         ));
-        m.nodes[self.l[1]] = MNANodeInfo::new_voltage_with_name(&format!(
+        m.nodes[l[1]] = MNANodeInfo::new_voltage_with_name(&format!(
             "v:Q:{},{},{}:{}",
-            self.pin[0],
-            self.pin[1],
-            self.pin[2],
+            pin[0],
+            pin[1],
+            pin[2],
             if pnp { "eb" } else { "be" }
         ));
-        m.nodes[self.l[2]] = MNANodeInfo::new_current_with_scale(
-            &format!("i:Q:{},{},{}:bc", self.pin[0], self.pin[1], self.pin[2],),
-            1.0 - self.params.ar(),
+        m.nodes[l[2]] = MNANodeInfo::new_current_with_scale(
+            &format!("i:Q:{},{},{}:bc", pin[0], pin[1], pin[2],),
+            1.0 - params.ar(),
         );
-        m.nodes[self.l[3]] = MNANodeInfo::new_current_with_scale(
-            &format!("i:Q:{},{},{}:be", self.pin[0], self.pin[1], self.pin[2],),
-            1.0 - self.params.af(),
+        m.nodes[l[3]] = MNANodeInfo::new_current_with_scale(
+            &format!("i:Q:{},{},{}:be", pin[0], pin[1], pin[2],),
+            1.0 - params.af(),
         );
         self.update_dynamic(m);
     }
 
     fn update_dynamic(&self, m: &mut MNASystem) {
-        m.set_dynamic(self.dyn_pnc_ieq, self.pnc.ieq);
-        m.set_dynamic(self.dyn_pnc_geq, self.pnc.geq);
-        m.set_dynamic(self.dyn_pne_ieq, self.pne.ieq);
-        m.set_dynamic(self.dyn_pne_geq, self.pne.geq);
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        m.set_dynamic(reserved.dyn_pnc_ieq, self.pnc.ieq);
+        m.set_dynamic(reserved.dyn_pnc_geq, self.pnc.geq);
+        m.set_dynamic(reserved.dyn_pne_ieq, self.pne.ieq);
+        m.set_dynamic(reserved.dyn_pne_geq, self.pne.geq);
     }
 
     fn newton(&mut self, m: &mut MNASystem) -> bool {
-        self.pnc.newton(m.b[self.l[0]].lu) && self.pne.newton(m.b[self.l[1]].lu)
+        let reserved = self.reserved.as_ref().expect("need reserved");
+        self.pnc.newton(m.b[reserved.l[0]].lu) && self.pne.newton(m.b[reserved.l[1]].lu)
     }
 }
 
@@ -914,6 +1000,7 @@ struct NetList {
     system: MNASystem,
 }
 
+#[allow(unused)]
 impl NetList {
     fn new(nodes: usize) -> Self {
         Self {
@@ -924,6 +1011,7 @@ impl NetList {
             system: MNASystem::default(),
         }
     }
+    fn add_component(component: &mut dyn Component) {}
 }
 
 #[cfg(test)]
@@ -975,7 +1063,7 @@ mod tests {
         done = pn.newton(0.8);
         assert!(!done);
         // But with more iterations it should converge
-        for i in 0..10 {
+        for _i in 0..10 {
             done = pn.newton(0.8);
             if done {
                 break;
@@ -989,16 +1077,21 @@ mod tests {
     fn test_component_polymorphism() -> Result<(), String> {
         let mut s = MNASystem::default();
         s.set_size(3);
-        let c1 = Resistor::new(&mut s, 100.0, 0, 1);
-        let c2 = Resistor::new(&mut s, 100.0, 1, 2);
-        let c3 = Capacitor::new(&mut s, 0.1, 1, 2);
-        let c4 = Diode::new(&mut s, 0, 1, DiodeParameters::default());
+        let c1 = Resistor::new(100.0, 0, 1);
+        let c2 = Resistor::new(100.0, 1, 2);
+        let c3 = Capacitor::new(0.1, 1, 2);
+        let c4 = Diode::new(0, 1, DiodeParameters::default());
         println!("{:?}", &c1);
-        println!("{:?}", &c3);
-        c1.stamp(&mut s);
-        c2.stamp(&mut s);
-        c3.stamp(&mut s);
-        let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2), Box::new(c3)];
+        println!("{:?}", &c4);
+        let mut v: Vec<Box<dyn Component>> = vec![Box::new(c1), Box::new(c2), Box::new(c3), Box::new(c4)];
+        // Reserve all components
+        for c in &mut v {
+            c.reserve(&mut s);
+        }
+        // Stamp into matrix
+        for c in &mut v {
+            c.stamp(&mut s);
+        }
         Ok(())
     }
 }
@@ -1006,9 +1099,9 @@ mod tests {
 fn main() {
     let mut s = MNASystem::default();
     s.set_size(3);
-    let c1 = Resistor::new(&mut s, 100.0, 0, 1);
-    let c2 = Resistor::new(&mut s, 100.0, 1, 2);
-    let c3 = Capacitor::new(&mut s, 0.1, 1, 2);
+    let c1 = Resistor::new(100.0, 0, 1);
+    let c2 = Resistor::new(100.0, 1, 2);
+    let c3 = Capacitor::new(0.1, 1, 2);
 
     println!("Hello from sim.rs");
     println!("{:?}", s);
